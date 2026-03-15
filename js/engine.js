@@ -31,6 +31,11 @@ import {
 } from "./data.js";
 
 const MAX_COMBO = 12;
+const MAX_COMBO_ROGUE = 24;
+
+function getComboMax(player) {
+  return player?.legendId === "rogue" ? MAX_COMBO_ROGUE : MAX_COMBO;
+}
 
 export function clone(value) {
   return structuredClone(value);
@@ -764,6 +769,7 @@ export function hydrateRunState(run, profile = createEmptyProfile()) {
     next.battle.ultimateCharge = next.battle.ultimateCharge ?? 0;
     next.battle.ultimateReadyCount = next.battle.ultimateReadyCount ?? 0;
     next.battle.spellEnergyRefundUsed = !!next.battle.spellEnergyRefundUsed;
+    next.battle.critEnergyRefundUsed = !!next.battle.critEnergyRefundUsed;
     next.battle.potionUsedThisTurn = !!next.battle.potionUsedThisTurn;
     next.battle.pendingVictory = !!next.battle.pendingVictory;
     next.battle.hand = (next.battle.pendingVictory
@@ -910,6 +916,20 @@ function applySpellCritRefund(nextBattle, action, outcome, popups) {
     popups.push({ target: "player", amount: `+${refunded}`, style: "status", lane: 2, tag: "ENERGY" });
   } else {
     popups.push({ target: "player", amount: "", style: "status", lane: 2, tag: "SURGE" });
+  }
+}
+
+function applyCritEnergyRefund(nextBattle, outcome, popups) {
+  const refundAmount = Math.max(0, Math.floor(outcome.relicMods.critEnergyRefund || 0));
+  if (!refundAmount) return;
+  if (!outcome.isCrit) return;
+  if (nextBattle.critEnergyRefundUsed) return;
+
+  const refunded = Math.min(refundAmount, Math.max(0, (nextBattle.energyMax || 0) - (nextBattle.energy || 0)));
+  nextBattle.energy = Math.min(nextBattle.energyMax || nextBattle.energy, (nextBattle.energy || 0) + refundAmount);
+  nextBattle.critEnergyRefundUsed = true;
+  if (refunded > 0) {
+    popups.push({ target: "player", amount: `+${refunded}`, style: "status", lane: 2, tag: "ECLIPSE" });
   }
 }
 
@@ -1324,7 +1344,7 @@ function resolveActionAmount(action, power, relicMods) {
 }
 
 export function getActionPreview(player, action, options = {}) {
-  const combo = Math.min(MAX_COMBO, options.combo ?? player.combo);
+  const combo = Math.min(getComboMax(player), options.combo ?? player.combo);
   const elapsed = options.elapsed ?? 1000;
   const relicMods = options.relicMods ?? getRelicModifiers(player);
   const turnActionsPlayed = options.turnActionsPlayed ?? 0;
@@ -1687,6 +1707,7 @@ export function startBattle(run, node) {
     energyMax,
     turnActionsPlayed: 0,
     spellEnergyRefundUsed: false,
+    critEnergyRefundUsed: false,
     potionUsedThisTurn: false,
     ultimateCharge: 0,
     ultimateThreshold,
@@ -1972,6 +1993,7 @@ function resolveEnemyTurn(run, player, battle, logMessage, inheritedPopups = [])
     energyMax,
     turnActionsPlayed: 0,
     spellEnergyRefundUsed: false,
+    critEnergyRefundUsed: false,
     potionUsedThisTurn: false,
     turnNote: finalPlayer.hp <= 0
       ? "The enemy phase ends the climb."
@@ -2150,7 +2172,7 @@ function resolveTurnFromOutcome(run, player, nextBattle, action, outcome) {
 
   if (outcome.isCorrect) {
     nextBattle.battleStats.hits += 1;
-    player.combo = Math.min(MAX_COMBO, player.combo + 1);
+    player.combo = Math.min(getComboMax(player), player.combo + 1);
     player.bestCombo = Math.max(player.bestCombo || 0, player.combo);
     if (outcome.isCrit) nextBattle.battleStats.crits += 1;
 
@@ -2201,6 +2223,7 @@ function resolveTurnFromOutcome(run, player, nextBattle, action, outcome) {
     }
 
     applySpellCritRefund(nextBattle, action, outcome, popups);
+    applyCritEnergyRefund(nextBattle, outcome, popups);
 
     nextBattle.feedback = action.type === "ULTIMATE" ? nextBattle.feedback : outcome.feedback;
     nextBattle.playerMotion = action.type === "ULTIMATE"
