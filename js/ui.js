@@ -1095,14 +1095,16 @@ function renderBattle(run, timeLeft) {
       ${battle.phaseCue ? `<div class="turn-phase-banner ${isEnemyPhase ? "enemy" : "player"}">${battle.phaseCue}</div>` : ""}
       <div class="battle-upper">
         <div class="player-panel ${playerMotionClass}">
-            <div class="player-avatar-wrap">
+          <div class="player-avatar-wrap">
             <div class="player-avatar ${legend.color}">${renderArtBadge({ asset: legend.asset, fallback: legend.icon, alt: legend.name, className: "avatar-art player-art" })}</div>
             ${player.block > 0 ? `<div class="player-block-ring">${player.block}</div>` : ""}
           </div>
-          <div class="player-name-pill">${legend.name}</div>
-          <div class="health-stack">
-            <div class="meter-row"><span>HP</span><div class="meter"><i style="width:${pct(player.hp / player.maxHp)}"></i></div></div>
-            <div class="player-health-copy">${player.hp} / ${player.maxHp} HP | Combo ${player.combo}</div>
+          <div class="player-info">
+            <div class="player-name-pill">${legend.name}</div>
+            <div class="health-stack">
+              <div class="meter-row"><span>HP</span><div class="meter"><i style="width:${pct(player.hp / player.maxHp)}"></i></div></div>
+              <div class="player-health-copy">${player.hp} / ${player.maxHp} HP | Combo ${player.combo}</div>
+            </div>
           </div>
         </div>
         <div class="enemy-stage">
