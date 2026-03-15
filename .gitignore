@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Dev tools, test runners, test output
+tools/
+output/
+
+# Staging area for incoming art
+incoming_assets/
+
+# Editor / AI tooling
+.claude/
+
+# Dev spec & research docs
+BASE_PROGRESSION_SPEC.md
+GRAPHIC_ASSET_REQUIREMENTS.md
+PRODUCTION_SYSTEM_SPEC.md
+PROJECT_BRIEF.md
+PROTOTYPE_STUDY.md
+SLAY_THE_SPIRE_RESEARCH.md
+WIZARD_SKILL_TREE_SPEC.md
+progress.md
+
+# Old prototype reference files
+prototype_reference.jsx
+prototype_v12_reference.jsx
