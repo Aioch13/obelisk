@@ -107,11 +107,22 @@ function getSkillNodeStatus(player, node) {
   return ready ? "available" : "locked";
 }
 
-function getSkillNodeEffectModifiers(node) {
+function getSkillNodeLevel(player, nodeId) {
+  return (player.skillNodeLevels || {})[nodeId] || 0;
+}
+
+const SKILL_LEVEL_MULT = [0, 1, 1.2, 1.4];
+
+function getSkillNodeEffectModifiers(node, level = 1) {
+  const mult = SKILL_LEVEL_MULT[Math.max(1, Math.min(3, level))] ?? 1;
   const modifiers = {};
   Object.entries(node.effect || {}).forEach(([key, value]) => {
     if (key === "techniqueId") return;
-    modifiers[key] = value;
+    if (typeof value === "number") {
+      modifiers[key] = Math.round(value * mult * 100) / 100;
+    } else {
+      modifiers[key] = value;
+    }
   });
   return modifiers;
 }
@@ -199,10 +210,18 @@ export function getSkillTreeState(player) {
       const nodes = tree.nodes
         .filter((node) => node.lane === laneId)
         .sort((left, right) => left.tier - right.tier)
-        .map((node) => ({
-          ...node,
-          status: getSkillNodeStatus(player, node),
-        }));
+        .map((node) => {
+          const level = getSkillNodeLevel(player, node.id);
+          const maxLevel = node.maxLevel || 1;
+          const owned = (player.skillNodesUnlocked || []).includes(node.id);
+          return {
+            ...node,
+            status: getSkillNodeStatus(player, node),
+            level,
+            maxLevel,
+            isUpgradeable: owned && level < maxLevel,
+          };
+        });
       return {
         ...lane,
         nodes,
@@ -805,7 +824,8 @@ export function hydrateRunState(run, profile = createEmptyProfile()) {
 export function getRelicModifiers(player) {
   const mods = (player.skillNodesUnlocked || []).reduce((result, nodeId) => {
     const node = getSkillNodeById(player.legendId, nodeId);
-    Object.entries(getSkillNodeEffectModifiers(node || {})).forEach(([key, value]) => {
+    const level = getSkillNodeLevel(player, nodeId);
+    Object.entries(getSkillNodeEffectModifiers(node || {}, level)).forEach(([key, value]) => {
       if (typeof value === "number") {
         result[key] = (result[key] || 0) + value;
       } else {
@@ -2586,21 +2606,34 @@ export function unlockSkillNode(run, nodeId) {
   const node = getSkillNodeById(player.legendId, nodeId);
   if (!node) return run;
   if (Math.max(0, Number(player.skillPoints || 0)) <= 0) return run;
-  if (getSkillNodeStatus(player, node) !== "available") return run;
+
+  const isOwned = (player.skillNodesUnlocked || []).includes(nodeId);
+  const currentLevel = getSkillNodeLevel(player, nodeId);
+  const maxLevel = node.maxLevel || 1;
+
+  if (isOwned) {
+    if (currentLevel >= maxLevel) return run;
+    player.skillNodeLevels = { ...(player.skillNodeLevels || {}), [nodeId]: currentLevel + 1 };
+  } else {
+    if (getSkillNodeStatus(player, node) !== "available") return run;
+    player.skillNodesUnlocked = [...(player.skillNodesUnlocked || []), nodeId];
+    player.skillNodeLevels = { ...(player.skillNodeLevels || {}), [nodeId]: 1 };
+    if (node.effect?.techniqueId) {
+      applyTechniqueToPlayer(player, node.effect.techniqueId);
+    }
+  }
 
   player.skillPoints -= 1;
-  player.skillNodesUnlocked = [...(player.skillNodesUnlocked || []), node.id];
-  if (node.effect?.techniqueId) {
-    applyTechniqueToPlayer(player, node.effect.techniqueId);
-  } else {
-    player.actions = rebuildPlayerActions(player);
-  }
+  player.actions = rebuildPlayerActions(player);
+
+  const levelAfter = (player.skillNodeLevels || {})[nodeId] || 1;
+  const logMsg = isOwned ? `${node.label} upgraded to L${levelAfter}.` : `${node.label} learned.`;
 
   return {
     ...run,
     player,
     skillTreeOpen: true,
-    log: [...run.log, `${node.label} learned.`],
+    log: [...run.log, logMsg],
   };
 }
 

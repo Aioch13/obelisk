@@ -960,6 +960,47 @@ function renderRunRail(run) {
   `;
 }
 
+const TECHNIQUE_LABELS = {
+  "knight-shield-rush":      "Strike → Shield Rush (ATK+barrier)",
+  "knight-bulwark-form":     "Guard → Bulwark Form (heavy ward)",
+  "knight-sanctuary-banner": "Unlocks Sanctuary Banner (UTIL: heal+barrier)",
+  "knight-execution-drive":  "Strike → Execution Drive (2-hit finisher)",
+  "wizard-arc-lash":         "Strike → Arc Lash (3-hit AOE roam)",
+  "wizard-rune-spear":       "Strike → Rune Spear (precision crit bolt)",
+  "wizard-restoration-sigil":"Unlocks Restoration Sigil (UTIL: heal+ward)",
+  "wizard-chain-burst":      "Sunder Wave → Chain Burst (5-hit AOE storm)",
+  "rogue-slice-and-dice":    "Strike → Slice and Dice (roaming flurry)",
+  "rogue-night-bloom":       "Strike → Night Bloom (assassin string)",
+  "rogue-fan-of-knives":     "Sunder Wave → Fan of Knives (full-field ricochet)",
+};
+
+function formatSkillEffect(effect = {}, level = 1) {
+  const MULT = [0, 1, 1.2, 1.4];
+  const mult = MULT[Math.max(1, Math.min(3, level))] ?? 1;
+  const sc = (v) => Math.round(v * mult * 100) / 100;
+  const lines = [];
+  if (effect.techniqueId)           lines.push(TECHNIQUE_LABELS[effect.techniqueId] || `Unlocks ${effect.techniqueId}`);
+  if (effect.firstAttackPower)      lines.push(`+${Math.round(sc(effect.firstAttackPower) * 100)}% first-attack damage`);
+  if (effect.blockOnCorrect)        lines.push(`+${Math.round(sc(effect.blockOnCorrect))} barrier per correct answer`);
+  if (effect.guardPower)            lines.push(`+${Math.round(sc(effect.guardPower) * 100)}% guard & block power`);
+  if (effect.critPowerBonus)        lines.push(`+${Math.round(sc(effect.critPowerBonus) * 100)}% crit damage`);
+  if (effect.quickCritChance)       lines.push(`+${Math.round(sc(effect.quickCritChance))}% crit chance on fast answers`);
+  if (effect.critSplash)            lines.push(`+${Math.round(sc(effect.critSplash) * 100)}% crit AOE splash`);
+  if (effect.critEnergyRefund)      lines.push(`Crit refunds ${Math.round(sc(effect.critEnergyRefund))} energy (once/turn)`);
+  if (effect.spellEnergyRefundOnCrit) lines.push(`First HARD crit refunds ${Math.round(sc(effect.spellEnergyRefundOnCrit))} energy/turn`);
+  if (effect.comboPowerPerStackBonus) lines.push(`+${Math.round(sc(effect.comboPowerPerStackBonus) * 100)}% damage per combo stack`);
+  if (effect.softComboBreak)        lines.push(`Miss halves combo instead of full reset`);
+  if (effect.firstActionDiscount)   lines.push(`First action costs ${Math.round(sc(effect.firstActionDiscount))} less energy`);
+  if (effect.hardActionPower)       lines.push(`+${Math.round(sc(effect.hardActionPower) * 100)}% HARD action power`);
+  if (effect.bonusEnergyPerTurn)    lines.push(`+${Math.round(sc(effect.bonusEnergyPerTurn))} energy per turn`);
+  if (effect.ultimatePowerBonus)    lines.push(`+${Math.round(sc(effect.ultimatePowerBonus) * 100)}% ultimate power`);
+  if (effect.ultimateThresholdDelta) lines.push(`${effect.ultimateThresholdDelta > 0 ? "+" : ""}${effect.ultimateThresholdDelta} ultimate charge required`);
+  if (effect.restorationHealPower)  lines.push(`+${Math.round(sc(effect.restorationHealPower) * 100)}% heal power`);
+  if (effect.potionHealPower)       lines.push(`+${Math.round(sc(effect.potionHealPower) * 100)}% potion heal power`);
+  if (effect.focusCritBoost)        lines.push(`+${Math.round(sc(effect.focusCritBoost) * 100)}% crit multiplier`);
+  return lines;
+}
+
 function renderSkillTree(run) {
   const tree = getSkillTreeState(run.player);
   return `
@@ -984,19 +1025,29 @@ function renderSkillTree(run) {
                 <span>${lane.theme}</span>
               </div>
               <div class="skill-lane-column">
-                ${lane.nodes.map((node) => `
+                ${lane.nodes.map((node) => {
+                  const statLines = formatSkillEffect(node.effect || {}, node.level || 1);
+                  const canAct = (node.status === "available" || node.isUpgradeable) && tree.points > 0;
+                  const isMaxed = node.status === "owned" && !node.isUpgradeable;
+                  const levelPips = node.maxLevel > 1
+                    ? `<div class="skill-node-levels">${Array.from({ length: node.maxLevel }, (_, i) => `<span class="${i < (node.level || 0) ? "pip-filled" : "pip-empty"}"></span>`).join("")}</div>`
+                    : "";
+                  const badgeLabel = isMaxed ? "Maxed" : node.isUpgradeable ? `Upgrade → L${(node.level || 0) + 1}` : node.status === "available" ? "Learn" : "Locked";
+                  return `
                   <button
-                    class="skill-node skill-node-${node.status}"
+                    class="skill-node skill-node-${isMaxed ? "owned" : node.status}"
                     data-action="unlock-skill-node"
                     data-skill-node-id="${node.id}"
-                    ${node.status === "available" && tree.points > 0 ? "" : "disabled"}
+                    ${canAct ? "" : "disabled"}
                   >
                     <span class="skill-node-tier">Tier ${node.tier}</span>
                     <strong>${node.label}</strong>
+                    ${levelPips}
                     <span>${node.description}</span>
-                    <em>${node.status === "owned" ? "Learned" : node.status === "available" ? "Available" : "Locked"}</em>
+                    ${statLines.length ? `<ul class="skill-node-stats">${statLines.map(l => `<li>${l}</li>`).join("")}</ul>` : ""}
+                    <em>${badgeLabel}</em>
                   </button>
-                `).join("")}
+                `}).join("")}
               </div>
             </div>
           `).join("")}
