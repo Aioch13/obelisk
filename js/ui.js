@@ -1,6 +1,7 @@
 import { ACT_TIME_LIMITS, HERBS, LEGENDS, MAP_HEIGHT, MATERIALS, NODE_ASSETS, NODE_ICONS, POTIONS, SCREEN, SPIRES } from "./data.js";
 import {
   canAffordAction,
+  getBattleBuffSummary,
   describeActionPreviewClean,
   getActForFloor,
   getActionCost,
@@ -88,9 +89,29 @@ function buildSavedRunSummary(run) {
 function formatCompactImpact(action, info) {
   const { preview } = info;
   if (action.type === "ULTIMATE") {
-    return `Est. ${preview.normalAmount} power | Crit ${preview.critAmount}`;
+    return `${preview.normalAmount} power | ${preview.critAmount} crit`;
   }
-  return info.label;
+  if (action.type === "UTILITY") {
+    const notes = [];
+    if (preview.buffLabel) notes.push(`${preview.buffDuration} turns`);
+    if (preview.secondaryBlock) notes.push(`+${preview.secondaryBlock} ward`);
+    if (preview.energyRestore) notes.push(`+${preview.energyRestore} energy`);
+    if (preview.buffLabel) {
+      return `${preview.buffLabel}${notes.length ? ` | ${notes.join(" | ")}` : ""}`;
+    }
+    return `${preview.normalAmount} restore${notes.length ? ` | ${notes.join(" | ")}` : ""}`;
+  }
+  const amountLabel = action.type === "DEFEND"
+    ? `${preview.normalAmount} block`
+    : action.type === "AOE"
+      ? `${preview.normalAmount} to all`
+      : `${preview.normalAmount} dmg`;
+  const notes = [];
+  if (action.type !== "DEFEND") notes.push(`${preview.critAmount} crit`);
+  if (preview.hits > 1) notes.push(`${preview.hits} hits`);
+  if (preview.secondaryBlock) notes.push(`+${preview.secondaryBlock} ward`);
+  if (preview.guardHealOnCorrect) notes.push(`+${preview.guardHealOnCorrect} mend`);
+  return `${amountLabel}${notes.length ? ` | ${notes.join(" | ")}` : ""}`;
 }
 
 function tooltipAttr(text) {
@@ -236,7 +257,7 @@ function renderHerbPills(stock = {}, options = {}) {
   const rows = getHerbRows(stock, options);
   const className = options.className || "herb-pill-row";
   if (!rows.length) {
-    return `<div class="${className}"><div class="herb-pill is-empty">No herbs gathered</div></div>`;
+    return `<div class="${className}"><div class="herb-pill is-empty">Herb satchel empty</div></div>`;
   }
   return `
     <div class="${className}">
@@ -310,7 +331,7 @@ function renderPotionRack(player, options = {}) {
                 data-potion-id="${potion.id}"
                 ${useDisabled ? "disabled" : ""}
               >
-                ${potion.kind === "HEAL" ? "Drink" : "Battle Only"}
+                ${potion.kind === "HEAL" ? "Drink" : "Use In Battle"}
               </button>
             </div>
           </div>
@@ -864,10 +885,13 @@ function renderMap(run) {
         <button class="header-button subtle" data-action="return-hub">Return To Camp</button>
       </div>
       <div class="map-layout">
-        <div class="map-scroll-shell" id="mapScrollShell">
-          <div class="map-canvas" style="height:${layout.height}px;">
-            <svg class="map-svg" viewBox="0 0 ${layout.width} ${layout.height}" preserveAspectRatio="xMidYMin meet">${lines}</svg>
-            ${buttons}
+        <div class="map-main-column">
+          ${renderRoutePanel(run)}
+          <div class="map-scroll-shell" id="mapScrollShell">
+            <div class="map-canvas" style="height:${layout.height}px;">
+              <svg class="map-svg" viewBox="0 0 ${layout.width} ${layout.height}" preserveAspectRatio="xMidYMin meet">${lines}</svg>
+              ${buttons}
+            </div>
           </div>
         </div>
         ${renderRunRail(run)}
@@ -882,81 +906,136 @@ function renderRunRail(run) {
   const mechanics = getPlayerMechanicSummary(run.player);
   const skillTree = getSkillTreeState(run.player);
   const act = getActForFloor(run.player.floor);
-  const visibleRelics = run.player.relics.slice(0, 4);
-  const extraRelics = Math.max(0, run.player.relics.length - visibleRelics.length);
-  const visibleActions = run.player.actions.filter((action) => !action.requiresUnlock || run.player[action.requiresUnlock]);
-
+  const herbTotal = Object.values(run.player.herbs || {}).reduce((sum, amount) => sum + Math.max(0, Number(amount || 0)), 0);
+  const potionTotal = Object.values(run.player.potions || {}).reduce((sum, amount) => sum + Math.max(0, Number(amount || 0)), 0);
+  const readyNodes = skillTree.lanes.reduce((sum, lane) => sum + lane.nodes.filter((node) => node.status === "available").length, 0);
+  const ownedNodes = skillTree.lanes.reduce((sum, lane) => sum + lane.nodes.filter((node) => node.status === "owned").length, 0);
+  const activePanel = run.routePanel || "";
+  const panelButtons = [
+    { id: "stats", label: "Stats", meta: `${run.player.stats.str}/${run.player.stats.vit}/${run.player.stats.focus}` },
+    { id: "skill-tree", label: "Skill Tree", meta: `${ownedNodes} learned | ${readyNodes} ready` },
+    { id: "potions", label: "Potions", meta: `${herbTotal} herbs | ${potionTotal} tonics` },
+    { id: "relics", label: "Relics", meta: `${run.player.relics.length} carried` },
+  ];
   return `
     <aside class="run-rail">
-      <section class="rail-card snapshot-card">
-        <p class="eyebrow">Run Snapshot</p>
+      <section class="rail-card rail-summary-card">
+        <p class="eyebrow">Field Ledger</p>
         <h3>${legend.name}</h3>
         <div class="snapshot-subline">${spire.name} | Act ${act} | ${seconds(getBattleTimeLimit(run))}</div>
         ${renderStatChips(run.player.stats, mechanics, "rail-stats")}
-        <div class="snapshot-grid">
-          <div class="snapshot-item"><strong>Passive</strong><span>${legend.passive}</span></div>
-          <div class="snapshot-item"><strong>Pace</strong><span>Acts: ${ACT_TIME_LIMITS.map((limit) => seconds(limit)).join(" / ")}</span></div>
-          <div class="snapshot-item"><strong>Power</strong><span>STR +${mechanics.strPowerPct}% | FOCUS +${mechanics.focusCritChancePct}% crit chance</span></div>
-          <div class="snapshot-item"><strong>Crit</strong><span>FOCUS +${mechanics.focusCritPowerPct}% crit damage | fast answers add crit chance only</span></div>
-          <div class="snapshot-item"><strong>Energy</strong><span>${mechanics.energyPerTurn} per turn${mechanics.firstActionDiscount ? ` | first play -${mechanics.firstActionDiscount}` : ""}</span></div>
-          <div class="snapshot-item"><strong>Ultimate</strong><span>Ready after ${mechanics.ultimateThreshold} energy spent</span></div>
+        <div class="rail-summary-strip">
+          <div class="snapshot-item compact-tree-item"><strong>Energy</strong><span>${mechanics.energyPerTurn} each turn</span></div>
+          <div class="snapshot-item compact-tree-item"><strong>Ultimate</strong><span>${mechanics.ultimateThreshold} spent</span></div>
+          <div class="snapshot-item compact-tree-item"><strong>Relics</strong><span>${run.player.relics.length} carried</span></div>
         </div>
       </section>
-      <section class="rail-card talent-card">
-        <div class="build-header">
-          <div>
-            <p class="eyebrow">Class Tree</p>
-            <h3>${skillTree.title}</h3>
-          </div>
-          <div class="build-count">${skillTree.points} pts</div>
-        </div>
-        <div class="snapshot-grid talent-grid">
-          ${skillTree.lanes.map((lane) => {
-            const owned = lane.nodes.filter((node) => node.status === "owned").length;
-            const available = lane.nodes.filter((node) => node.status === "available").length;
-            return `<div class="snapshot-item"><strong>${lane.name}</strong><span>${lane.theme}</span><em>${owned} learned${available ? ` | ${available} ready` : ""}</em></div>`;
-          }).join("")}
-        </div>
-        <button class="header-button primary talent-open-button" data-action="open-skill-tree">${skillTree.points > 0 ? `Spend ${skillTree.points} Point${skillTree.points === 1 ? "" : "s"}` : "View Skill Tree"}</button>
-      </section>
-      <section class="rail-card apothecary-card">
-        <div class="build-header">
-          <div>
-            <p class="eyebrow">Apothecary</p>
-            <h3>Field Crafting</h3>
-          </div>
-          <div class="build-count">3 slots each</div>
-        </div>
-        ${renderHerbPills(run.player.herbs, { includeEmpty: true })}
-        ${renderPotionRack(run.player, { mode: "map" })}
-      </section>
-      <section class="rail-card build-card">
-        <div class="build-header">
-          <div>
-            <p class="eyebrow">Build</p>
-            <h3>Relics & Kit</h3>
-          </div>
-          <div class="build-count">${run.player.relics.length} relics</div>
-        </div>
-        <div class="relic-chip-row">
-          ${run.player.relics.length ? visibleRelics.map((relic) => `<div class="relic-chip tooltip-anchor" title="${relic.description}" ${tooltipAttr(relic.description)} tabindex="0"><strong>${relic.name}</strong><span>${relic.rarity}</span></div>`).join("") : `<div class="relic-chip muted">No relics yet</div>`}
-          ${extraRelics ? `<div class="relic-chip muted">+${extraRelics} more</div>` : ""}
-        </div>
-        <div class="kit-mini-list">
-          ${visibleActions.map((action) => {
-            const info = describeActionPreviewClean(run.player, action);
-            return `<div class="kit-mini-item"><strong>${action.hotkey} | ${action.name}</strong><span>L${action.level} | ${action.type} | ${action.energyCost ?? 1} EN</span><span>${info.preview.normalAmount} base / ${info.preview.critAmount} crit</span></div>`;
-          }).join("")}
-          ${run.player.utilitySlotUnlocked ? "" : `<div class="kit-mini-item kit-mini-item-muted"><strong>F | Sealed Utility</strong><span>Locked</span><span>Unlock a restoration art mid-climb to open this slot.</span></div>`}
-        </div>
-      </section>
-      <section class="rail-card">
-        <p class="eyebrow">Recent</p>
-        <div class="rail-list">
-          ${run.log.slice(-3).reverse().map((entry) => `<div class="rail-item compact"><span>${entry}</span></div>`).join("")}
+      <section class="rail-card rail-nav-card">
+        <p class="eyebrow">Field Kit</p>
+        <div class="rail-nav-list">
+          ${panelButtons.map((panel) => `
+            <button
+              class="rail-nav-button ${activePanel === panel.id ? "is-active" : ""}"
+              data-action="toggle-route-panel"
+              data-route-panel="${panel.id}"
+            >
+              <span>${panel.label}</span>
+              <em>${panel.meta}</em>
+            </button>
+          `).join("")}
         </div>
       </section>
     </aside>
+  `;
+}
+
+function renderRoutePanel(run) {
+  const panel = run.routePanel || "";
+  if (!panel) return "";
+
+  const legend = getLegend(run.player.legendId);
+  const mechanics = getPlayerMechanicSummary(run.player);
+  const skillTree = getSkillTreeState(run.player);
+  const herbTotal = Object.values(run.player.herbs || {}).reduce((sum, amount) => sum + Math.max(0, Number(amount || 0)), 0);
+  const potionTotal = Object.values(run.player.potions || {}).reduce((sum, amount) => sum + Math.max(0, Number(amount || 0)), 0);
+  const logNote = run.log[run.log.length - 1] || "Choose the next foothold when you're ready.";
+  const panelLabels = {
+    stats: "Stats",
+    "skill-tree": "Skill Tree",
+    potions: "Potions",
+    relics: "Relics",
+  };
+
+  const panelMeta = {
+    stats: `${run.player.stats.str}/${run.player.stats.vit}/${run.player.stats.focus}`,
+    "skill-tree": `${skillTree.points} point${skillTree.points === 1 ? "" : "s"} banked`,
+    potions: `${herbTotal} herbs | ${potionTotal} tonics`,
+    relics: `${run.player.relics.length} carried`,
+  };
+
+  let body = "";
+  if (panel === "stats") {
+    body = `
+      <div class="route-panel-grid stats-grid">
+        <div class="snapshot-item"><strong>Passive</strong><span>${legend.passive}</span></div>
+        <div class="snapshot-item"><strong>Pace</strong><span>${ACT_TIME_LIMITS.map((limit) => seconds(limit)).join(" / ")}</span></div>
+        <div class="snapshot-item"><strong>Power</strong><span>STR +${mechanics.strPowerPct}% | FOCUS +${mechanics.focusCritChancePct}% crit</span></div>
+        <div class="snapshot-item"><strong>Crit</strong><span>FOCUS +${mechanics.focusCritPowerPct}% crit damage</span></div>
+      </div>
+    `;
+  }
+
+  if (panel === "skill-tree") {
+    body = `
+      <div class="route-panel-grid talent-grid compact-lane-grid">
+        ${skillTree.lanes.map((lane) => {
+          const owned = lane.nodes.filter((node) => node.status === "owned").length;
+          const available = lane.nodes.filter((node) => node.status === "available").length;
+          return `<div class="snapshot-item compact-tree-item"><strong>${lane.name}</strong><span>${owned} learned${available ? ` | ${available} ready` : ""}</span></div>`;
+        }).join("")}
+      </div>
+      <div class="route-panel-actions">
+        <button class="header-button primary talent-open-button" data-action="open-skill-tree">${skillTree.points > 0 ? `Spend ${skillTree.points} Point${skillTree.points === 1 ? "" : "s"}` : "View Skill Tree"}</button>
+      </div>
+    `;
+  }
+
+  if (panel === "potions") {
+    body = `
+      <div class="route-panel-potions">
+        ${renderHerbPills(run.player.herbs, { includeEmpty: true })}
+        ${renderPotionRack(run.player, { mode: "map" })}
+      </div>
+    `;
+  }
+
+  if (panel === "relics") {
+    body = `
+      <div class="route-panel-grid relics-grid">
+        <div class="relic-chip-row">
+          ${run.player.relics.length
+            ? run.player.relics.map((relic) => `<div class="relic-chip tooltip-anchor" title="${relic.description}" ${tooltipAttr(relic.description)} tabindex="0"><strong>${relic.name}</strong><span>${relic.rarity}</span></div>`).join("")
+            : `<div class="relic-chip muted">Relic satchel empty</div>`}
+        </div>
+        <div class="rail-last-note">${logNote}</div>
+      </div>
+    `;
+  }
+
+  return `
+    <section class="route-stage-panel" data-route-panel-stage="${panel}">
+      <div class="route-stage-panel-head">
+        <div>
+          <p class="eyebrow">Field Kit</p>
+          <h3>${panelLabels[panel] || "Field Notes"}</h3>
+        </div>
+        <div class="route-stage-panel-tools">
+          <span>${panelMeta[panel] || ""}</span>
+          <button class="header-button ghost route-stage-close" data-action="toggle-route-panel" data-route-panel="${panel}">Close</button>
+        </div>
+      </div>
+      ${body}
+    </section>
   `;
 }
 
@@ -1010,7 +1089,7 @@ function renderSkillTree(run) {
           <div>
             <p class="eyebrow">Run Skill Tree</p>
             <h2>${tree.title}</h2>
-            <p class="utility-copy">Spend points to shape this climb. Unlock deeper nodes by following each lane downward.</p>
+            <p class="utility-copy">Spend points to shape this climb. Follow each lane downward and commit to a clear build.</p>
           </div>
           <div class="skill-tree-points">
             <span>Points</span>
@@ -1019,34 +1098,45 @@ function renderSkillTree(run) {
         </div>
         <div class="skill-tree-lanes">
           ${tree.lanes.map((lane) => `
-            <div class="skill-lane">
+            <div class="skill-lane" data-skill-lane="${lane.id}">
               <div class="skill-lane-head">
                 <p class="eyebrow">${lane.name}</p>
                 <span>${lane.theme}</span>
               </div>
-              <div class="skill-lane-column">
-                ${lane.nodes.map((node) => {
+              <div class="skill-lane-track">
+                ${lane.nodes.map((node, index) => {
                   const statLines = formatSkillEffect(node.effect || {}, node.level || 1);
                   const canAct = (node.status === "available" || node.isUpgradeable) && tree.points > 0;
                   const isMaxed = node.status === "owned" && !node.isUpgradeable;
+                  const nodeTooltip = [node.label, node.description, ...statLines.slice(0, 3)].filter(Boolean).join(" | ");
                   const levelPips = node.maxLevel > 1
                     ? `<div class="skill-node-levels">${Array.from({ length: node.maxLevel }, (_, i) => `<span class="${i < (node.level || 0) ? "pip-filled" : "pip-empty"}"></span>`).join("")}</div>`
                     : "";
                   const badgeLabel = isMaxed ? "Maxed" : node.isUpgradeable ? `Upgrade → L${(node.level || 0) + 1}` : node.status === "available" ? "Learn" : "Locked";
                   return `
-                  <button
-                    class="skill-node skill-node-${isMaxed ? "owned" : node.status}"
-                    data-action="unlock-skill-node"
-                    data-skill-node-id="${node.id}"
-                    ${canAct ? "" : "disabled"}
-                  >
-                    <span class="skill-node-tier">Tier ${node.tier}</span>
-                    <strong>${node.label}</strong>
-                    ${levelPips}
-                    <span>${node.description}</span>
-                    ${statLines.length ? `<ul class="skill-node-stats">${statLines.map(l => `<li>${l}</li>`).join("")}</ul>` : ""}
-                    <em>${badgeLabel}</em>
-                  </button>
+                  <div class="skill-node-step ${index === lane.nodes.length - 1 ? "is-last" : ""}">
+                    <div class="skill-node-spine" aria-hidden="true">
+                      <span class="skill-node-orb skill-node-orb-${isMaxed ? "owned" : node.status}">${node.tier}</span>
+                      ${index === lane.nodes.length - 1 ? "" : `<span class="skill-node-link"></span>`}
+                    </div>
+                    <button
+                      class="skill-node skill-node-${isMaxed ? "owned" : node.status} tooltip-anchor"
+                      data-action="unlock-skill-node"
+                      data-skill-node-id="${node.id}"
+                      title="${escapeAttr(nodeTooltip)}"
+                      ${tooltipAttr(nodeTooltip)}
+                      ${canAct ? "" : "disabled"}
+                    >
+                      <div class="skill-node-topline">
+                        <span class="skill-node-tier">Tier ${node.tier}</span>
+                        <em>${badgeLabel.replace("â†’", "to")}</em>
+                      </div>
+                      <strong>${node.label}</strong>
+                      <span class="skill-node-copy">${node.description}</span>
+                      ${levelPips}
+                      ${statLines.length ? `<div class="skill-node-stats">${statLines.slice(0, 2).map((line) => `<span>${line}</span>`).join("")}</div>` : ""}
+                    </button>
+                  </div>
                 `}).join("")}
               </div>
             </div>
@@ -1101,6 +1191,7 @@ function renderBattle(run, timeLeft) {
   const isVictoryBeat = !!battle.pendingVictory;
   const showBurst = battle.feedback && !["Choose an action.", "Solve fast."].includes(battle.feedback);
   const playerMotionClass = battle.playerMotion ? `motion-${battle.playerMotion}` : "";
+  const activeBuffs = getBattleBuffSummary(player);
   const actionCards = battle.hand.map((action) => {
     const info = describeActionPreviewClean(player, action);
     const impactLabel = formatCompactImpact(action, info);
@@ -1156,6 +1247,7 @@ function renderBattle(run, timeLeft) {
               <div class="meter-row"><span>HP</span><div class="meter"><i style="width:${pct(player.hp / player.maxHp)}"></i></div></div>
               <div class="player-health-copy">${player.hp} / ${player.maxHp} HP | Combo ${player.combo}</div>
             </div>
+            ${activeBuffs.length ? `<div class="player-buff-strip">${activeBuffs.map((buff) => `<span class="player-buff-pill" title="${escapeAttr(buff.description)}">${buff.label} ${buff.turns}T</span>`).join("")}</div>` : ""}
           </div>
         </div>
         <div class="enemy-stage">
@@ -1198,12 +1290,12 @@ function renderBattle(run, timeLeft) {
         </div>
         <div class="combat-turn-note">${battle.turnNote || "Spend energy carefully and keep the pressure on."}</div>
         <div class="battle-potion-strip">
-          <span class="belt-label">Belt${battle.potionUsedThisTurn ? " · Used" : ""}</span>
+          <span class="belt-label">Belt${battle.potionUsedThisTurn ? " | Used" : ""}</span>
           ${potionRow}
         </div>
         ${isVictoryBeat ? `
           <div class="problem-stage victory-beat-stage">
-            <div class="problem-text">Encounter Broken</div>
+            <div class="problem-text">Encounter Cleared</div>
           </div>
         ` : !selectedAction ? `
           <div class="action-hand">${actionCards}</div>
@@ -1238,12 +1330,13 @@ function renderVictory(run) {
       <div class="victory-modal">
         <div class="modal-accent"></div>
         <div class="victory-scroll no-scroll-needed">
-          <div class="victory-title-row">
-            <div class="victory-title-copy">
-              <p class="eyebrow">Encounter Broken</p>
-              <h2>${reward.leveled ? "Level Up!" : "Spoils Claimed"}</h2>
-            </div>
-            ${reward.leveled ? `<div class="levelup-banner">LEVEL RAISED | ${run.player.level + 1}</div>` : ""}
+        <div class="victory-title-row">
+          <div class="victory-title-copy">
+            <p class="eyebrow">Encounter Cleared</p>
+            <h2>${reward.leveled ? "Level Up!" : "Spoils Claimed"}</h2>
+            <p class="victory-subcopy">Choose one prize for the road, then press deeper into the spire.</p>
+          </div>
+          ${reward.leveled ? `<div class="levelup-banner">LEVEL ${run.player.level + 1}</div>` : ""}
           </div>
           <div class="reward-grid">
             <div><span>XP</span><strong>+${reward.xp}</strong></div>
@@ -1257,8 +1350,8 @@ function renderVictory(run) {
             ${reward.relic ? renderRelicRewardCard(reward.relic, "Elite Relic") : ""}
           </div>
           <div class="draft-header compact">
-            <p class="eyebrow">Spoils</p>
-            <h3>Take One Reward</h3>
+            <p class="eyebrow">War Chest</p>
+            <h3>Choose One Prize</h3>
           </div>
           <div class="reward-draft-grid">
             ${reward.trainingChoices.map((choice) => `
@@ -1268,8 +1361,8 @@ function renderVictory(run) {
               </button>
             `).join("")}
             <button class="reward-draft-card skip-card ${!reward.selectedTrainingId ? "is-selected" : ""}" data-action="choose-victory-reward" data-reward-id="skip">
-              <strong>Take Nothing</strong>
-              <span>Keep the loadout lean and march upward.</span>
+              <strong>Pass For Now</strong>
+              <span>Travel light and keep climbing.</span>
             </button>
           </div>
         </div>
@@ -1306,14 +1399,14 @@ function renderRunReport(run) {
         <div class="run-report-grid">
           <div><span>Total Time</span><strong>${formatRunDuration(report.elapsedMs)}</strong></div>
           <div><span>Accuracy</span><strong>${report.accuracy}%</strong></div>
-          <div><span>Monsters Killed</span><strong>${report.monstersKilled}</strong></div>
+          <div><span>Foes Defeated</span><strong>${report.monstersKilled}</strong></div>
           <div><span>Crits Landed</span><strong>${report.totalCrits}</strong></div>
         </div>
         <div class="run-report-grid secondary">
           <div><span>Battles</span><strong>${report.battlesCleared}</strong></div>
           <div><span>Elites</span><strong>${report.elitesCleared}</strong></div>
           <div><span>Bosses</span><strong>${report.bossesCleared}</strong></div>
-          <div><span>Damage Done</span><strong>${report.damageDone}</strong></div>
+          <div><span>Total Damage</span><strong>${report.damageDone}</strong></div>
         </div>
         <div class="run-report-reasons">
           ${report.starReasons.map((reason, index) => `
@@ -1339,11 +1432,12 @@ function renderEvent(run) {
         <p class="eyebrow">Omen Chamber</p>
         <h2>${event.title}</h2>
         <p class="utility-copy">${event.text}</p>
-        <div class="utility-grid triple">
+        <div class="utility-grid triple event-choice-grid">
           ${event.choices.map((choice) => `
             <button class="utility-card event-card ${choice.disabled ? "is-disabled" : ""}" data-action="event-choice" data-choice="${choice.id}" ${choice.disabled ? "disabled" : ""}>
+              <span class="event-card-tag">${choice.disabled ? "Unavailable" : "Choice"}</span>
               <strong>${choice.label}</strong>
-              <span>${choice.description}</span>
+              <p>${choice.description}</p>
               ${choice.disabledReason ? `<em>${choice.disabledReason}</em>` : ""}
             </button>
           `).join("")}
@@ -1431,7 +1525,7 @@ function renderMinigame(run) {
           <div><span>Broker</span><strong>${minigame.foeWins}</strong></div>
           <div><span>Round</span><strong>${minigame.round}</strong></div>
         </div>
-        ${lastRound ? `<div class="minigame-last-round">Last round: ${lastRound.playerMove} vs ${lastRound.foeMove} · ${lastRound.winner === "draw" ? "draw" : lastRound.winner === "player" ? "you won" : "broker won"}</div>` : ""}
+        ${lastRound ? `<div class="minigame-last-round">Last round: ${lastRound.playerMove} vs ${lastRound.foeMove} | ${lastRound.winner === "draw" ? "draw" : lastRound.winner === "player" ? "you won" : "broker won"}</div>` : ""}
         <div class="utility-grid triple">
           ${minigame.moves.map((move) => `
             <button class="utility-card minigame-move-card" data-action="play-minigame-move" data-move-id="${move.id}">
@@ -1489,32 +1583,6 @@ function renderTreasure(run) {
             <p>Treasure rooms always pay coin with the relic. Take both, then continue the ascent.</p>
           </div>
         </div>
-      </div>
-    </section>
-  `;
-}
-
-function renderUtilityRevealLegacy(run) {
-  const reveal = run.utilityReveal;
-  if (!reveal) return "";
-  const relic = reveal.relic;
-  return `
-    <section class="modal-backdrop">
-      <div class="utility-modal utility-reveal-modal">
-        <p class="eyebrow">${reveal.source === "event" ? "Omen Reward" : "Discovery"}</p>
-        <h2>${reveal.title}</h2>
-        ${reveal.subtitle ? `<p class="utility-copy">${reveal.subtitle}</p>` : ""}
-        <div class="utility-reveal-card ${rarityClass(relic?.rarity || "COMMON")}">
-          <div class="utility-reveal-orb">
-            <span class="relic-orb-icon">◆</span>
-          </div>
-          <div class="utility-reveal-copy">
-            <span>${relic?.rarity || "COMMON"}</span>
-            <strong>${relic?.name || "Unknown Relic"}</strong>
-            <p>${relic?.description || "A strange token now joins the run."}</p>
-          </div>
-        </div>
-        <button class="header-button primary utility-close" data-action="dismiss-utility-reveal">${reveal.continueLabel || "Continue"}</button>
       </div>
     </section>
   `;
@@ -1762,6 +1830,7 @@ export function buildGameText(state) {
   };
 
   if (run.screen === SCREEN.MAP) {
+    payload.routePanel = run.routePanel || null;
     payload.reachableNodes = getReachableNodes(run).map((node) => ({ id: node.id, type: node.type, floor: node.floor }));
     payload.crafting = {
       available: true,
@@ -1885,6 +1954,7 @@ export function buildGameText(state) {
       prompt: selectedAction?.problem?.text || null,
       answers: selectedAction?.problem?.options || [],
       feedback: run.battle.feedback,
+      activeBuffs: getBattleBuffSummary(run.player),
     };
   }
 

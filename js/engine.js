@@ -111,6 +111,40 @@ function getSkillNodeLevel(player, nodeId) {
   return (player.skillNodeLevels || {})[nodeId] || 0;
 }
 
+function normalizeBattleBuffs(player) {
+  player.battleBuffs = (player.battleBuffs || [])
+    .filter((buff) => buff && Number(buff.turns || 0) > 0)
+    .map((buff) => ({
+      id: buff.id,
+      label: buff.label,
+      turns: Math.max(1, Number(buff.turns || 0)),
+      description: buff.description || "",
+      apply: clone(buff.apply || {}),
+    }));
+  return player;
+}
+
+function advanceBattleBuffs(player) {
+  player.battleBuffs = (player.battleBuffs || [])
+    .map((buff) => ({ ...buff, turns: Math.max(0, Number(buff.turns || 0) - 1) }))
+    .filter((buff) => buff.turns > 0);
+  return player;
+}
+
+function applyBattleBuff(player, action) {
+  if (!action?.buffApply || !action?.buffId) return null;
+  const nextBuff = {
+    id: action.buffId,
+    label: action.buffLabel || action.name,
+    turns: Math.max(1, Number(action.buffDuration || 1)),
+    description: action.buffDescription || action.detail || "",
+    apply: clone(action.buffApply || {}),
+  };
+  const existing = (player.battleBuffs || []).filter((buff) => buff.id !== nextBuff.id);
+  player.battleBuffs = [...existing, nextBuff];
+  return nextBuff;
+}
+
 const SKILL_LEVEL_MULT = [0, 1, 1.2, 1.4];
 
 function getSkillNodeEffectModifiers(node, level = 1) {
@@ -144,11 +178,14 @@ function applyTechniquePatch(action, technique) {
 }
 
 function rebuildPlayerActions(player) {
+  const legend = getLegend(player.legendId);
   const baseActions = BASE_ACTIONS.map((baseAction) => {
     const existing = player.actions?.find((action) => action.id === baseAction.id);
+    const starterPatch = legend?.starterActions?.[baseAction.id] || {};
     return {
       ...baseAction,
       ...existing,
+      ...starterPatch,
       id: baseAction.id,
       hotkey: baseAction.hotkey,
       baseValue: existing?.baseValue ?? baseAction.baseValue ?? baseAction.value,
@@ -239,7 +276,7 @@ export function getNextRestTraining(player) {
     return {
       kind: "ULTIMATE",
       title: `Awaken ${ultimate.name}`,
-      description: `Train at the forge-rest to unlock ${ultimate.name} for future battles.`,
+      description: `Train in the sanctuary to awaken ${ultimate.name} for future battles.`,
       iconLabel: "ULT",
     };
   }
@@ -296,6 +333,14 @@ function normalizePotionStock(stock = {}) {
   const next = createEmptyPotionStock();
   Object.keys(POTIONS).forEach((potionId) => {
     next[potionId] = Math.max(0, Math.min(3, Number(stock?.[potionId] || 0)));
+  });
+  return next;
+}
+
+function addPotionStock(baseStock = {}, delta = {}) {
+  const next = normalizePotionStock(baseStock);
+  Object.keys(POTIONS).forEach((potionId) => {
+    next[potionId] = Math.max(0, Math.min(3, next[potionId] + Math.max(0, Number(delta?.[potionId] || 0))));
   });
   return next;
 }
@@ -630,6 +675,7 @@ export function createPlayerFromLegend(legendId) {
     skillPoints: 0,
     skillNodesUnlocked: [],
     techniquesUnlocked: [],
+    battleBuffs: [],
     herbs: createEmptyHerbStock(),
     potions: createEmptyPotionStock(),
   };
@@ -725,6 +771,7 @@ export function createRun(legendId, spireId = "mixed", profile = createEmptyProf
     chosenNodeId: null,
     battle: null,
     reward: null,
+    routePanel: null,
     skillTreeOpen: false,
     screen: "MAP",
     activeFloor: 0,
@@ -750,8 +797,12 @@ export function hydrateRunState(run, profile = createEmptyProfile()) {
   next.player.skillPoints = Math.max(0, Number(next.player.skillPoints || 0));
   next.player.skillNodesUnlocked = [...new Set(next.player.skillNodesUnlocked || [])];
   next.player.techniquesUnlocked = [...new Set(next.player.techniquesUnlocked || [])];
+  normalizeBattleBuffs(next.player);
   next.player.herbs = normalizeHerbStock(next.player.herbs);
   next.player.potions = normalizePotionStock(next.player.potions);
+  if (next.screen !== SCREEN.BATTLE) {
+    next.player.battleBuffs = [];
+  }
   next.player.skillNodesUnlocked.forEach((nodeId) => {
     const node = getSkillNodeById(next.player.legendId, nodeId);
     const techniqueId = node?.effect?.techniqueId;
@@ -775,6 +826,7 @@ export function hydrateRunState(run, profile = createEmptyProfile()) {
   next.utilityReveal = next.utilityReveal || null;
   next.minigameOffer = next.minigameOffer || null;
   next.restOffer = next.restOffer || null;
+  next.routePanel = next.routePanel || null;
   next.skillTreeOpen = !!next.skillTreeOpen;
   next.shopOffer = (next.shopOffer || []).filter((offer) => offer?.actionId !== "heal");
   if (next.reward?.trainingChoices) {
@@ -822,7 +874,7 @@ export function hydrateRunState(run, profile = createEmptyProfile()) {
 }
 
 export function getRelicModifiers(player) {
-  const mods = (player.skillNodesUnlocked || []).reduce((result, nodeId) => {
+  const nodeMods = (player.skillNodesUnlocked || []).reduce((result, nodeId) => {
     const node = getSkillNodeById(player.legendId, nodeId);
     const level = getSkillNodeLevel(player, nodeId);
     Object.entries(getSkillNodeEffectModifiers(node || {}, level)).forEach(([key, value]) => {
@@ -834,6 +886,16 @@ export function getRelicModifiers(player) {
     });
     return result;
   }, {});
+  const buffMods = (player.battleBuffs || []).reduce((result, buff) => {
+    Object.entries(buff.apply || {}).forEach(([key, value]) => {
+      if (typeof value === "number") {
+        result[key] = (result[key] || 0) + value;
+      } else {
+        result[key] = value;
+      }
+    });
+    return result;
+  }, nodeMods);
   return player.relics.reduce((result, relic) => {
     Object.entries(relic.apply).forEach(([key, value]) => {
       if (typeof value === "number") {
@@ -843,7 +905,7 @@ export function getRelicModifiers(player) {
       }
     });
     return result;
-  }, mods);
+  }, buffMods);
 }
 
 export function getEnergyMax(player, relicMods = getRelicModifiers(player)) {
@@ -862,6 +924,10 @@ function getPotionHealAmount(player, potion, relicMods = getRelicModifiers(playe
   return Math.max(0, Math.floor(player.maxHp * (potion.healPct || 0) * (1 + (relicMods.potionHealPower || 0))));
 }
 
+function getSpoilsGoldAmount(player, amount, relicMods = getRelicModifiers(player)) {
+  return Math.max(0, Math.floor(amount * (1 + (relicMods.spoilGoldPct || 0))));
+}
+
 function canCraftPotion(player, potionId) {
   const potion = getPotionConfig(potionId);
   if (!potion) return false;
@@ -869,7 +935,7 @@ function canCraftPotion(player, potionId) {
   return Math.max(0, Number(player.herbs?.[potion.herbId] || 0)) >= 1;
 }
 
-function rollHerbDrop(nodeType) {
+function rollSingleHerbDrop(nodeType) {
   if (nodeType === NODE_TYPES.MONSTER) {
     const roll = Math.random();
     if (roll < 0.42) return { white: 1 };
@@ -881,6 +947,15 @@ function rollHerbDrop(nodeType) {
     return Math.random() < 0.6 ? { yellow: 1 } : { blue: 1 };
   }
   return createEmptyHerbStock();
+}
+
+function rollHerbDrop(nodeType, relicMods = {}) {
+  let herbs = rollSingleHerbDrop(nodeType);
+  const extraRolls = Math.max(0, Math.floor(relicMods.bonusHerbDrops || 0));
+  for (let index = 0; index < extraRolls; index += 1) {
+    herbs = addHerbStock(herbs, rollSingleHerbDrop(nodeType));
+  }
+  return herbs;
 }
 
 function getStrengthMultiplier(strength) {
@@ -913,6 +988,15 @@ function getBattleTurnNote(energy, energyMax, canContinue) {
     return `${energy}/${energyMax} energy left. Play again or press E to end turn.`;
   }
   return "No playable actions left. Press End Turn to let the enemies act.";
+}
+
+export function getBattleBuffSummary(player) {
+  return (player?.battleBuffs || []).map((buff) => ({
+    id: buff.id,
+    label: buff.label,
+    turns: buff.turns,
+    description: buff.description || "",
+  }));
 }
 
 function getUltimateTurnNote(player, battle) {
@@ -1034,7 +1118,7 @@ function buildActionEffects(action, outcome, player, battle) {
   }
 
   if (action.type === "UTILITY") {
-    return [createBattleEffect("heal", "player", 0, "healing")];
+    return [createBattleEffect(action.buffApply ? "guard" : "heal", "player", 0, action.buffApply ? "status" : "healing")];
   }
 
   return [];
@@ -1230,6 +1314,24 @@ function applyStructuredEffect(player, effect = {}, options = {}) {
     });
   }
 
+  if (effect.potions) {
+    const before = normalizePotionStock(player.potions);
+    const after = addPotionStock(before, effect.potions);
+    player.potions = after;
+    Object.entries(effect.potions).forEach(([potionId]) => {
+      const granted = Math.max(0, Number(after?.[potionId] || 0) - Number(before?.[potionId] || 0));
+      if (granted > 0) notes.push(`+${granted} ${POTIONS[potionId]?.name || potionId}`);
+    });
+  }
+
+  if (effect.skillPoints) {
+    const points = Math.max(0, Number(effect.skillPoints || 0));
+    if (points > 0) {
+      player.skillPoints = Math.max(0, Number(player.skillPoints || 0) + points);
+      notes.push(`+${points} skill point${points === 1 ? "" : "s"}`);
+    }
+  }
+
   if (effect.upgradeLowestHard) {
     const hardActions = player.actions.filter((action) => action.difficulty === "HARD" && action.id !== "util");
     const target = hardActions.reduce((best, action) => (action.level < best.level ? action : best), hardActions[0] || player.actions[0]);
@@ -1290,11 +1392,24 @@ function getChoiceDisabledReason(player, choice, relicPool = RELICS) {
   if (effect.loseGold && player.gold < effect.loseGold) {
     return `Need ${effect.loseGold} gold`;
   }
+  if (effect.unlockUltimate && player.ultimateUnlocked) {
+    return "Already awakened";
+  }
+  if (effect.techniqueId && (player.techniquesUnlocked || []).includes(effect.techniqueId)) {
+    return "Already learned";
+  }
   if (effect.relicId && !relicPool.some((relic) => relic.id === effect.relicId)) {
     return "Requires Relic Forge unlock";
   }
   if (effect.relicId && player.relics.some((relic) => relic.id === effect.relicId)) {
     return "Already owned";
+  }
+  if (effect.potions) {
+    const stock = normalizePotionStock(player.potions);
+    const wantsPotions = Object.entries(effect.potions).filter(([, amount]) => Number(amount) > 0);
+    if (wantsPotions.length && wantsPotions.every(([potionId]) => Math.max(0, Number(stock?.[potionId] || 0)) >= 3)) {
+      return "Belt full";
+    }
   }
   if (effect.randomRelic) {
     const ownedIds = new Set(player.relics.map((relic) => relic.id));
@@ -1375,6 +1490,11 @@ export function getActionPreview(player, action, options = {}) {
   const critMultiplier = 1.5 + (player.stats.focus * 0.05) + (relicMods.critPowerBonus || 0) + (relicMods.focusCritBoost || 0);
   const strMult = getStrengthMultiplier(player.stats.str);
   const hardBoost = action.difficulty === "HARD" ? (relicMods.hardActionPower || 0) : 0;
+  const typedBoost = action.type === "ATK"
+    ? (relicMods.attackPower || 0)
+    : action.type === "AOE"
+      ? (relicMods.aoePower || 0)
+      : 0;
   const comboMult = 1 + (combo * (0.05 + (relicMods.comboPowerPerStackBonus || 0)));
   const hits = action.hits || 1;
   const hitTargeting = action.hitTargeting || (action.type === "AOE" ? "ALL" : "TARGET");
@@ -1404,6 +1524,9 @@ export function getActionPreview(player, action, options = {}) {
       secondaryBlock: action.blockGain ? Math.floor(action.blockGain + (player.stats.vit * 0.8) + (relicMods.utilityBlockBonus || 0)) : 0,
       stunTurns: 0,
       energyRestore: Math.max(0, Number(action.energyRestore || 0)),
+      buffLabel: action.buffLabel || null,
+      buffDuration: Math.max(0, Number(action.buffDuration || 0)),
+      buffDescription: action.buffDescription || "",
     };
   }
   const baseValue = action.type === "ULTIMATE" ? (action.baseDamage || 1) : getActionUpgradeValue(action);
@@ -1412,7 +1535,7 @@ export function getActionPreview(player, action, options = {}) {
     ? (relicMods.firstAttackPower || 0)
     : 0;
   const ultimatePowerBoost = action.type === "ULTIMATE" ? (relicMods.ultimatePowerBonus || 0) : 0;
-  const normalPower = baseValue * powerBase * strMult * (1 + hardBoost + firstAttackBoost + ultimatePowerBoost) * comboMult * hits;
+  const normalPower = baseValue * powerBase * strMult * (1 + hardBoost + typedBoost + firstAttackBoost + ultimatePowerBoost) * comboMult * hits;
   const critPower = normalPower * critMultiplier;
   const normalAmount = resolveActionAmount(action, normalPower, relicMods);
   const critAmount = resolveActionAmount(action, critPower, relicMods);
@@ -1463,12 +1586,12 @@ export function describeActionPreview(player, action) {
   const preview = getActionPreview(player, action);
   const normal = formatAmountText(action, preview.normalAmount);
   const crit = formatAmountText(action, preview.critAmount);
-  const extraBlock = preview.bonusBlockOnCorrect ? ` · +${preview.bonusBlockOnCorrect} bonus block on hit` : "";
-  return {
-    preview,
-    label: `Est. ${normal} · Crit ${crit} · ${preview.critChance.toFixed(0)}% quick crit${extraBlock}`,
-  };
-}
+    const extraBlock = preview.bonusBlockOnCorrect ? ` | +${preview.bonusBlockOnCorrect} bonus block on hit` : "";
+    return {
+      preview,
+      label: `Est. ${normal} | Crit ${crit} | ${preview.critChance.toFixed(0)}% quick crit${extraBlock}`,
+    };
+  }
 
 export function describeActionPreviewClean(player, action) {
   const preview = getActionPreview(player, action);
@@ -1476,9 +1599,10 @@ export function describeActionPreviewClean(player, action) {
     const notes = [];
     if (preview.secondaryBlock) notes.push(`+${preview.secondaryBlock} block`);
     if (preview.energyRestore) notes.push(`+${preview.energyRestore} energy`);
+    if (preview.buffLabel) notes.push(`${preview.buffDuration} turns`);
     return {
       preview,
-      label: `Est. ${preview.normalAmount} restore${notes.length ? ` | ${notes.join(" | ")}` : ""}`,
+      label: `${preview.buffLabel ? preview.buffLabel : `Est. ${preview.normalAmount} restore`}${notes.length ? ` | ${notes.join(" | ")}` : ""}`,
     };
   }
   const normal = formatAmountText(action, preview.normalAmount);
@@ -1702,10 +1826,14 @@ export function createEnemies(nodeType, floor, legendId, contentState = null) {
 export function startBattle(run, node) {
   const player = clone(run.player);
   const legend = getLegend(player.legendId);
-  player.block = legend.startingBlock || 0;
-  const enemies = createEnemies(node.type, node.floor, player.legendId, run.contentState);
+  player.battleBuffs = [];
   const relicMods = getRelicModifiers(player);
+  player.block = (legend.startingBlock || 0) + Math.max(0, Math.floor(relicMods.battleStartBlock || 0));
+  player.combo = Math.max(player.combo || 0, Math.floor(relicMods.battleStartCombo || 0));
+  const enemies = createEnemies(node.type, node.floor, player.legendId, run.contentState);
   const energyMax = getEnergyMax(player, relicMods);
+  const openingTurnEnergy = Math.max(0, Math.floor(relicMods.openingTurnEnergy || 0));
+  const openingEnergyMax = energyMax + openingTurnEnergy;
   const ultimateThreshold = getUltimateThreshold(player, relicMods);
   const battle = {
     nodeType: node.type,
@@ -1716,15 +1844,15 @@ export function startBattle(run, node) {
     selectedActionCost: null,
     problemStartedAt: 0,
     feedback: "Choose an action.",
-    turnNote: `${energyMax}/${energyMax} energy ready. ${player.ultimateUnlocked ? `Spend ${ultimateThreshold} energy to ready your ultimate.` : "Train at a rest site to awaken your ultimate."}`,
+    turnNote: `${openingEnergyMax}/${openingEnergyMax} energy ready. ${player.ultimateUnlocked ? `Spend ${ultimateThreshold} energy to ready your ultimate.` : "Train at a rest site to awaken your ultimate."}`,
     damagePopups: [],
     effects: [],
     targetEnemyId: enemies[0]?.id || null,
     pendingEnemyPhase: false,
     pendingVictory: false,
     phaseCue: null,
-    energy: energyMax,
-    energyMax,
+    energy: openingEnergyMax,
+    energyMax: openingEnergyMax,
     turnActionsPlayed: 0,
     spellEnergyRefundUsed: false,
     critEnergyRefundUsed: false,
@@ -1743,6 +1871,7 @@ export function startBattle(run, node) {
     screen: "BATTLE",
     battle,
     player,
+    routePanel: null,
     skillTreeOpen: false,
     log: [...run.log, `${node.type} node engaged in Act ${getActForFloor(node.floor)}.`],
   };
@@ -1773,6 +1902,7 @@ export function chooseNode(run, nodeId) {
       ...run,
       screen: "EVENT",
       chosenNodeId: node.id,
+      routePanel: null,
       eventOffer: buildEventOffer(run),
       log: [...run.log, "An omen chamber opens along the climb."],
     };
@@ -1782,8 +1912,9 @@ export function chooseNode(run, nodeId) {
       ...run,
       screen: "REST",
       chosenNodeId: node.id,
+      routePanel: null,
       restOffer: { healPct: 0.4 },
-      log: [...run.log, "A forge-rest chamber offers a breather."],
+      log: [...run.log, "A sanctuary chamber offers a chance to regroup."],
     };
   }
   if (node.type === NODE_TYPES.TREASURE) {
@@ -1791,6 +1922,7 @@ export function chooseNode(run, nodeId) {
       ...run,
       screen: "TREASURE",
       chosenNodeId: node.id,
+      routePanel: null,
       treasureOffer: buildTreasureOffer(run),
       log: [...run.log, "A relic cache hums inside the Obelisk."],
     };
@@ -1800,6 +1932,7 @@ export function chooseNode(run, nodeId) {
       ...run,
       screen: "SHOP",
       chosenNodeId: node.id,
+      routePanel: null,
       shopOffer: buildShopOffer(run),
       log: [...run.log, "A frontier vendor signals from a side route."],
     };
@@ -1813,7 +1946,7 @@ export function buildTreasureOffer(run) {
   const relicPool = getRelicPoolFromIds(getRunContentState(run).relicIds);
   const relic = shuffle(relicPool.filter((entry) => !ownedIds.has(entry.id)))[0] || null;
   return {
-    goldBonus: 160 + player.floor * 30,
+    goldBonus: getSpoilsGoldAmount(player, 160 + player.floor * 30),
     relic,
   };
 }
@@ -1823,12 +1956,84 @@ export function buildEventOffer(run) {
   const eventPool = getEventPoolFromIds(getRunContentState(run).eventIds);
   const template = clone(sample(eventPool.length ? eventPool : EVENT_TEMPLATES));
   const relicPool = getRelicPoolFromIds(getRunContentState(run).relicIds);
+  if (template.id === "black-banner") {
+    const riteTechniqueByLegend = {
+      knight: "knight-marshals-oath",
+      wizard: "wizard-overchannel",
+      rogue: "rogue-cull-of-the-night",
+    };
+    const favoredActionByLegend = {
+      knight: "blk",
+      wizard: "aoe",
+      rogue: "atk",
+    };
+    const favoredAction = player.actions.find((action) => action.id === favoredActionByLegend[player.legendId]) || player.actions[0];
+    const riteTechnique = getTechniqueById(riteTechniqueByLegend[player.legendId]);
+    const alreadyKnowsRite = riteTechnique && (player.techniquesUnlocked || []).includes(riteTechnique.id);
+    template.text = player.legendId === "knight"
+      ? "A black war-banner waits in perfect stillness. Old marshal-oaths rise from the cloth, asking what kind of shield the frontier now needs."
+      : player.legendId === "wizard"
+        ? "A black ritual banner hangs over a cold brazier. Its sigils answer the air like unfinished equations waiting for a dangerous mind."
+        : "A black banner stitched with knife-quiet prayers sways without wind. It offers a killer's rite to anyone bold enough to take it.";
+    template.choices = template.choices.map((choice) => {
+      if (choice.id === "take-the-rite") {
+        if (riteTechnique && !alreadyKnowsRite) {
+          return {
+            ...choice,
+            label: `Claim ${riteTechnique.name}`,
+            description: `Learn ${riteTechnique.name} immediately and open your utility slot with a stronger class art.`,
+            effect: { techniqueId: riteTechnique.id },
+          };
+        }
+        return {
+          ...choice,
+          label: "Study The Banner",
+          description: "You already bear this rite. Gain 1 skill point and 1 Blue Herb instead.",
+          effect: { skillPoints: 1, herbs: { blue: 1 } },
+        };
+      }
+      if (choice.id === "wake-the-seal") {
+        if (!player.ultimateUnlocked) {
+          return {
+            ...choice,
+            label: `Awaken ${getUltimateConfig(player.legendId).name}`,
+            description: `Wake ${getUltimateConfig(player.legendId).name} for the rest of this climb.`,
+            effect: { unlockUltimate: true },
+          };
+        }
+        return {
+          ...choice,
+          label: "Feed The Banner Flame",
+          description: "Your ultimate is already awake. Gain 1 skill point and +1 Focus.",
+          effect: { skillPoints: 1, stats: { focus: 1 } },
+        };
+      }
+      if (choice.id === "carve-doctrine") {
+        return {
+          ...choice,
+          label: "Carve A Doctrine",
+          description: `Gain 1 skill point and upgrade ${favoredAction?.name || "your signature art"} by 1 level.`,
+          effect: { skillPoints: 1, upgradeActionId: favoredAction?.id || "atk", upgradeActionLevels: 1 },
+        };
+      }
+      return choice;
+    });
+  }
   if (template.id === "blood-merchant") {
     template.choices = template.choices.map((choice) => choice.id === "take-gold"
       ? {
           ...choice,
-          description: `Gain ${140 + (player.floor * 12)} gold with no further risk.`,
+          description: `Pocket ${140 + (player.floor * 12)} gold and walk away untouched.`,
           effect: { gold: 140 + (player.floor * 12) },
+        }
+      : choice);
+  }
+  if (template.id === "tally-of-crows") {
+    template.choices = template.choices.map((choice) => choice.id === "take-the-ransom"
+      ? {
+          ...choice,
+          description: `Claim ${180 + (player.floor * 10)} gold, but lose 10% max HP escaping the bargain.`,
+          effect: { gold: 180 + (player.floor * 10), loseHpPct: 0.1 },
         }
       : choice);
   }
@@ -1836,7 +2041,7 @@ export function buildEventOffer(run) {
     template.choices = template.choices.map((choice) => choice.id === "rupture-shell"
       ? {
           ...choice,
-          description: `Gain ${170 + (player.floor * 10)} gold, but lose 10% max HP in the blast.`,
+          description: `Rip out ${170 + (player.floor * 10)} gold, but lose 10% max HP in the blast.`,
           effect: { gold: 170 + (player.floor * 10), loseHpPct: 0.1 },
         }
       : choice);
@@ -1845,7 +2050,7 @@ export function buildEventOffer(run) {
     template.choices = template.choices.map((choice) => choice.id === "take-the-coin"
       ? {
           ...choice,
-          description: `Gain ${220 + (player.floor * 14)} gold, but lose 8% max HP escaping the trap.`,
+          description: `Escape with ${220 + (player.floor * 14)} gold, but lose 8% max HP in the scramble.`,
           effect: { gold: 220 + (player.floor * 14), loseHpPct: 0.08 },
         }
       : choice);
@@ -1993,6 +2198,7 @@ function resolveEnemyTurn(run, player, battle, logMessage, inheritedPopups = [])
     ...retaliation.player,
     block: 0,
   };
+  advanceBattleBuffs(finalPlayer);
   const relicMods = getRelicModifiers(finalPlayer);
   const energyMax = getEnergyMax(finalPlayer, relicMods);
   const finalBattle = {
@@ -2215,7 +2421,9 @@ function resolveTurnFromOutcome(run, player, nextBattle, action, outcome) {
 
     if (action.type === "UTILITY") {
       player.hp = Math.min(player.maxHp, player.hp + outcome.amount);
-      popups.push({ target: "player", amount: outcome.amount, style: "heal", lane: 0 });
+      if (outcome.amount > 0) {
+        popups.push({ target: "player", amount: outcome.amount, style: "heal", lane: 0 });
+      }
       if (outcome.preview.secondaryBlock) {
         player.block += outcome.preview.secondaryBlock;
         popups.push({ target: "player", amount: outcome.preview.secondaryBlock, style: "block", lane: 1, tag: "WARD" });
@@ -2223,6 +2431,10 @@ function resolveTurnFromOutcome(run, player, nextBattle, action, outcome) {
       if (outcome.preview.energyRestore) {
         nextBattle.energy = Math.min(nextBattle.energyMax || nextBattle.energy, (nextBattle.energy || 0) + outcome.preview.energyRestore);
         popups.push({ target: "player", amount: outcome.preview.energyRestore, style: "status", lane: 2, tag: "ENERGY" });
+      }
+      const buff = applyBattleBuff(player, action);
+      if (buff) {
+        popups.push({ target: "player", amount: "", style: "status", lane: 0, tag: buff.label.toUpperCase() });
       }
     }
 
@@ -2248,7 +2460,9 @@ function resolveTurnFromOutcome(run, player, nextBattle, action, outcome) {
     nextBattle.feedback = action.type === "ULTIMATE" ? nextBattle.feedback : outcome.feedback;
     nextBattle.playerMotion = action.type === "ULTIMATE"
       ? `${player.legendId}-ultimate`
-      : action.type.toLowerCase();
+      : action.type === "UTILITY" && action.buffApply
+        ? "utility-buff"
+        : action.type.toLowerCase();
   } else {
     player.combo = outcome.relicMods.softComboBreak ? Math.floor(player.combo / 2) : 0;
     nextBattle.feedback = action.type === "ULTIMATE" ? "ULTIMATE MISSED!" : "MISS!";
@@ -2454,12 +2668,13 @@ function getMetaRewardForNode(nodeType, floor) {
 
 function buildVictoryReward(run, player, battle) {
   const nodeType = battle.nodeType;
+  const relicMods = getRelicModifiers(player);
   const baseGold = Math.floor(28 + (player.floor * 8));
-  const gold = Math.floor(baseGold + (nodeType === NODE_TYPES.ELITE ? 60 : 0) + (nodeType === NODE_TYPES.BOSS ? 180 : 0));
+  const gold = getSpoilsGoldAmount(player, Math.floor(baseGold + (nodeType === NODE_TYPES.ELITE ? 60 : 0) + (nodeType === NODE_TYPES.BOSS ? 180 : 0)), relicMods);
   const xp = Math.floor(40 + (player.floor * 16) + (nodeType === NODE_TYPES.ELITE ? 45 : 0) + (nodeType === NODE_TYPES.BOSS ? 150 : 0));
   const relic = nodeType === NODE_TYPES.ELITE ? buildTreasureOffer(run).relic : null;
   const materials = getMetaRewardForNode(nodeType, player.floor);
-  const herbs = rollHerbDrop(nodeType);
+  const herbs = rollHerbDrop(nodeType, relicMods);
   const leveled = player.xp + xp >= player.xpNext;
   return {
     gold,
@@ -2485,7 +2700,7 @@ function createVictoryState(run, player, battle) {
       ...battle,
       pendingVictory: true,
       pendingEnemyPhase: false,
-      phaseCue: "BATTLE CLEARED",
+      phaseCue: "ENCOUNTER CLEARED",
       turnNote: "Hold the line. Claiming spoils...",
       hand: [],
       selectedActionId: null,
@@ -2560,6 +2775,7 @@ export function claimVictory(run) {
   }
   const selectedTraining = reward.trainingChoices?.find((choice) => choice.id === reward.selectedTrainingId) || null;
   const trainingLog = applyTrainingReward(player, selectedTraining);
+  player.battleBuffs = [];
   const nextMetaRewards = addMaterialStock(run.metaRewards, reward.materials);
   player.herbs = addHerbStock(player.herbs, reward.herbs || {});
   player.floor += 1;
@@ -2578,6 +2794,7 @@ export function claimVictory(run) {
     reward: null,
     battle: null,
     screen: isFinalClear ? SCREEN.RUN_REPORT : SCREEN.MAP,
+    routePanel: null,
     activeFloor: player.floor,
     reachableNodeIds: isFinalClear ? [] : reachableNodeIds,
     visitedNodeIds,
@@ -2656,7 +2873,7 @@ export function applyRestChoice(run, choice) {
     const relicMods = getRelicModifiers(player);
     const healPct = 0.4 + (relicMods.bonusRestHeal || 0);
     player.hp = Math.min(player.maxHp, player.hp + Math.floor(player.maxHp * healPct));
-    logMessage = "The forge-rest steadies the legend.";
+    logMessage = "The sanctuary steadies the legend.";
   }
   if (choice === "temper") {
     const temperPool = player.actions.filter((action) => action.id !== "util");
@@ -2668,7 +2885,7 @@ export function applyRestChoice(run, choice) {
     const nextTraining = getNextRestTraining(player);
     if (nextTraining?.kind === "SKILL_TREE") {
       player.skillPoints = Math.max(0, Number(player.skillPoints || 0) + 1);
-      logMessage = "A new talent point is etched into the run. The class tree opens.";
+      logMessage = "A fresh talent point is etched into the climb. The class tree opens.";
       const nextRun = advanceAfterUtility(run, player, logMessage);
       return {
         ...nextRun,
@@ -2716,7 +2933,7 @@ export function usePotion(run, potionId) {
 
   if (run.screen === SCREEN.MAP) {
     if (potion.kind !== "HEAL") return run;
-    const healAmount = getPotionHealAmount(player, potion);
+    const healAmount = getPotionHealAmount(player, potion, getRelicModifiers(player));
     if (healAmount <= 0 || player.hp >= player.maxHp) return run;
     player.hp = Math.min(player.maxHp, player.hp + healAmount);
     player.potions[potionId] = amountOwned - 1;
@@ -2733,15 +2950,17 @@ export function usePotion(run, potionId) {
   if (run.battle.potionUsedThisTurn) return run;
 
   const battle = clone(run.battle);
+  const relicMods = getRelicModifiers(player);
   let feedback = potion.name;
   if (potion.kind === "HEAL") {
-    const healAmount = getPotionHealAmount(player, potion);
+    const healAmount = getPotionHealAmount(player, potion, relicMods);
     if (healAmount <= 0 || player.hp >= player.maxHp) return run;
     player.hp = Math.min(player.maxHp, player.hp + healAmount);
     battle.damagePopups = [{ target: "player", amount: healAmount, style: "heal", lane: 0, tag: "POTION" }];
     feedback = `${potion.name} +${healAmount}`;
   } else {
-    const restored = Math.min(potion.energyRestore || 0, Math.max(0, (battle.energyMax || 0) - (battle.energy || 0)));
+    const energyRestore = Math.max(0, Number(potion.energyRestore || 0) + Number(relicMods.potionEnergyBonus || 0));
+    const restored = Math.min(energyRestore, Math.max(0, (battle.energyMax || 0) - (battle.energy || 0)));
     if (restored <= 0) return run;
     battle.energy = Math.min(battle.energyMax || battle.energy, (battle.energy || 0) + restored);
     battle.damagePopups = [{ target: "player", amount: restored, style: "status", lane: 2, tag: "ENERGY" }];
@@ -2933,6 +3152,7 @@ function advanceAfterUtility(run, player, logMessage, utilityReveal = null) {
     reachableNodeIds,
     visitedNodeIds,
     screen: player.floor >= MAP_HEIGHT ? "HUB" : "MAP",
+    routePanel: null,
     eventOffer: null,
     minigameOffer: null,
     restOffer: null,

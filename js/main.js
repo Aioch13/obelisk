@@ -322,6 +322,16 @@ function handleAction(action, payload = {}) {
     return;
   }
 
+  if (action === "toggle-route-panel" && state.run.screen === SCREEN.MAP) {
+    state.run = {
+      ...state.run,
+      routePanel: state.run.routePanel === payload.routePanel ? null : payload.routePanel,
+    };
+    persist();
+    render(true);
+    return;
+  }
+
   if (action === "open-skill-tree" && state.run.screen === SCREEN.MAP) {
     commit(openSkillTree(state.run));
     return;
@@ -456,6 +466,7 @@ app.addEventListener("click", (event) => {
     relicId: target.dataset.relicId,
     itemId: target.dataset.itemId,
     potionId: target.dataset.potionId,
+    routePanel: target.dataset.routePanel,
     enemyId: target.dataset.enemyId,
     rewardId: target.dataset.rewardId,
     buildingId: target.dataset.buildingId,
