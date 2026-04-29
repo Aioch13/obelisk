@@ -3698,11 +3698,52 @@ p {
 
 .combat-card-meta {
   margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 0.66rem;
   text-transform: uppercase;
   letter-spacing: 0.16em;
   font-weight: 900;
   color: rgba(255, 255, 255, 0.84);
+}
+
+/* Difficulty pill — the most important thing the action card needs to
+ * communicate at a glance: what kind of math problem will appear when
+ * the player picks this card. EASY = simple arithmetic (addition/etc),
+ * HARD = harder pool (multiplication, larger operands).
+ *
+ * Color-coded so the player builds intuition through play rather than
+ * reading definitions: green = comfortable, amber = challenging.
+ */
+.combat-card-difficulty {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.combat-card-difficulty-easy {
+  background: rgba(16, 185, 129, 0.22);
+  color: rgba(187, 247, 208, 0.98);
+  border: 1px solid rgba(16, 185, 129, 0.55);
+}
+
+.combat-card-difficulty-hard {
+  background: rgba(245, 158, 11, 0.22);
+  color: rgba(254, 215, 170, 0.98);
+  border: 1px solid rgba(245, 158, 11, 0.55);
+}
+
+.combat-card-type {
+  opacity: 0.72;
+  font-weight: 800;
+  letter-spacing: 0.14em;
 }
 
 .combat-card-impact {

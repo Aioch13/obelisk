@@ -1553,7 +1553,12 @@ function renderBattle(run, timeLeft) {
         <div class="combat-card-key">${action.hotkey}</div>
         <div class="combat-card-cost">${action.type === "ULTIMATE" ? (battle.ultimateReadyCount > 0 ? "READY" : `${battle.ultimateCharge}/${battle.ultimateThreshold}`) : `${liveCost} EN`}</div>
         <div class="combat-card-title">${action.name}</div>
-        <div class="combat-card-meta">${action.type}${action.level ? ` | L${action.level}` : ""}${action.type === "ULTIMATE" ? ` | ${legend.name}` : ""}</div>
+        <div class="combat-card-meta">
+          ${action.difficulty
+            ? `<span class="combat-card-difficulty combat-card-difficulty-${action.difficulty.toLowerCase()}">${action.difficulty}</span>`
+            : ""}
+          <span class="combat-card-type">${action.type}${action.level ? ` · L${action.level}` : ""}${action.type === "ULTIMATE" ? ` · ${legend.name}` : ""}</span>
+        </div>
         <div class="combat-card-impact">${impactLabel}</div>
         <div class="combat-card-detail">${action.detail || ""}</div>
       </button>
