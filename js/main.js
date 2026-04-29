@@ -11,14 +11,17 @@ import {
   claimTreasure,
   claimVictory,
   createRun,
+  dismissAchievementReveal,
   dismissUtilityReveal,
   dismissUnlockReveal,
   endPlayerTurn,
   getBattleTimeLeft,
   getBattleTimeLimit,
+  getClimbTier,
   getUnlockedSpireIds,
   hydrateProfile,
   hydrateRunState,
+  isSpireAllowedAtTier,
   isSpireUnlocked,
   leaveUtilityNode,
   openSkillTree,
@@ -45,6 +48,7 @@ const state = {
   setup: {
     legendId: null,
     spireId: null,
+    tierId: null,
     phase: "home",
     view: "expedition",
     entryMode: "new",
@@ -80,6 +84,7 @@ function resetSetup(notice = null) {
   state.setup = {
     legendId: null,
     spireId: null,
+    tierId: null,
     phase: "home",
     view: "expedition",
     entryMode: "new",
@@ -140,13 +145,38 @@ function scrollActiveNodeIntoView() {
   }
 }
 
+// Track the "screen identity" between renders so we can suppress modal
+// entry animations when the user is interacting WITHIN a screen (e.g.,
+// picking a victory reward). Without this, every state change replays a
+// ~1.2s cascade of fades and it looks like the screen is "refreshing".
+let lastScreenKey = null;
+
+function getCurrentScreenKey() {
+  if (state.setup?.view === "base") return "base";
+  if (!state.run && state.setup?.phase && state.setup.phase !== "home") {
+    return `setup-${state.setup.phase}`;
+  }
+  if (!state.run) return "home";
+  // Group "victory" by floor so the victory modal stays settled across
+  // reward picks but re-animates on a brand-new victory.
+  if (state.run.screen === "VICTORY") return `victory-${state.run.player?.floor ?? 0}`;
+  return `${state.run.screen}-${state.run.player?.floor ?? 0}`;
+}
+
 function render(force = false) {
   if (!force && !needsRender) {
     syncRuntimeUi();
     return;
   }
 
+  const newScreenKey = getCurrentScreenKey();
+  const isSettled = newScreenKey === lastScreenKey;
   app.innerHTML = renderApp(state);
+  // The class lives on the app root and is read by CSS rules that disable
+  // the entry-fade animations for modals/cards that have already shown up.
+  app.classList.toggle("screen-settled", isSettled);
+  lastScreenKey = newScreenKey;
+
   window.render_game_to_text = () => buildGameText(state);
   needsRender = false;
   syncRuntimeUi();
@@ -248,9 +278,37 @@ function handleAction(action, payload = {}) {
     return;
   }
 
+  // Step 2 -> Step 3: spire chosen, advance to tier picker. Default to the
+  // profile's last-used tier so returning players don't have to re-pick.
+  if (action === "advance-to-tier") {
+    if (!state.setup.spireId || !isSpireUnlocked(state.profile, state.setup.spireId)) return;
+    state.setup.phase = "tier";
+    if (!state.setup.tierId) {
+      state.setup.tierId = state.profile.preferredTierId || "adept";
+    }
+    markDirty();
+    render(true);
+    return;
+  }
+
+  if (action === "select-tier") {
+    state.setup.tierId = payload.tierId;
+    markDirty();
+    render(true);
+    return;
+  }
+
   if (action === "change-legend") {
     state.setup.phase = "legend";
     state.setup.spireId = null;
+    state.setup.tierId = null;
+    markDirty();
+    render(true);
+    return;
+  }
+
+  if (action === "change-spire") {
+    state.setup.phase = "spire";
     markDirty();
     render(true);
     return;
@@ -265,8 +323,21 @@ function handleAction(action, payload = {}) {
 
   if (action === "start-run") {
     if (!state.setup.legendId || !state.setup.spireId || !isSpireUnlocked(state.profile, state.setup.spireId)) return;
+    const tierId = state.setup.tierId || state.profile.preferredTierId || "adept";
+    // Defense-in-depth: the tier card disables the Begin button when a tier
+    // blocks the chosen spire, but never trust the DOM. Reroute to spire pick.
+    if (!isSpireAllowedAtTier(state.setup.spireId, tierId)) {
+      state.setup.phase = "spire";
+      state.setup.notice = `${getClimbTier(tierId).name} tier doesn't allow that spire's operation. Pick another spire.`;
+      markDirty();
+      render(true);
+      return;
+    }
     state.setup.notice = null;
-    commit(createRun(state.setup.legendId, state.setup.spireId, state.profile));
+    // Persist tier as the profile's preferred default for future runs.
+    state.profile = { ...state.profile, preferredTierId: tierId };
+    saveProfile(state.profile);
+    commit(createRun(state.setup.legendId, state.setup.spireId, state.profile, tierId));
     return;
   }
 
@@ -295,6 +366,14 @@ function handleAction(action, payload = {}) {
   if (action === "dismiss-unlock-reveal") {
     state.profile = dismissUnlockReveal(state.profile);
     saveProfile({ ...state.profile, lastRun: null });
+    markDirty();
+    render(true);
+    return;
+  }
+
+  if (action === "dismiss-achievement-reveal") {
+    state.profile = dismissAchievementReveal(state.profile);
+    saveProfile({ ...state.profile, lastRun: state.run });
     markDirty();
     render(true);
     return;
@@ -458,6 +537,7 @@ app.addEventListener("click", (event) => {
     mode: target.dataset.mode,
     legend: target.dataset.legend,
     spireId: target.dataset.spireId,
+    tierId: target.dataset.tierId,
     nodeId: target.dataset.nodeId,
     actionId: target.dataset.actionId,
     answer: target.dataset.answer,

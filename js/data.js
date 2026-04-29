@@ -1,3 +1,4 @@
+// Static content & constants for The Obelisk.
 export const APP_KEY = "the_obelisk_prototype_v1";
 export const MAP_HEIGHT = 30;
 export const ACT_LENGTH = 10;
@@ -115,6 +116,200 @@ export const LEGENDS = [
         name: "Blade Gust",
         detail: "Whip a spread of steel through the whole pack with one hard throw.",
       },
+    },
+  },
+];
+
+// --- Climb Tiers ---------------------------------------------------------
+//
+// A tier sets the *academic* baseline for a run. The act ramp (1->2->3) still
+// happens within the tier, so every learner gets the same roguelike pacing
+// arc; only the numeric content changes. "adept" is the as-shipped tuning
+// and is the default so existing players see no change unless they opt in.
+//
+// Each tier defines:
+//   - timerMultiplier: scales ACT_TIME_LIMITS (younger learners need more time)
+//   - quickWindowMultiplier: scales QUICK_WINDOW_MS (don't punish slow young readers)
+//   - distractorScale: multiplier on multiple-choice distractor offsets so big
+//                      numbers get readable option spreads
+//   - allowedOps: which operators may appear at this tier (filters the mixed
+//                 spire's pool and locks single-op spires the tier excludes)
+//   - ranges: per-op, per-act numeric envelope. Acts are 1-indexed in this
+//             config; index 0 is unused, index 1/2/3 line up with getActForFloor.
+export const DEFAULT_TIER_ID = "adept";
+
+export const CLIMB_TIERS = [
+  {
+    id: "sprout",
+    name: "Sprout",
+    audience: "Pre-K – Grade 1",
+    summary: "Single-digit sums. No times tables, no division.",
+    description: "Numbers stay small enough to count on fingers. Subtraction never goes below zero. Long timers and a generous crit window so the climb feels playful, not stressful.",
+    timerMultiplier: 1.5,
+    quickWindowMultiplier: 1.6,
+    distractorScale: 1,
+    allowedOps: ["+", "-"],
+    ranges: {
+      "+": [
+        null,
+        { lo: 1, hi: 4, hardSpread: 1 },
+        { lo: 1, hi: 5, hardSpread: 2 },
+        { lo: 2, hi: 6, hardSpread: 2 },
+      ],
+      "-": [
+        null,
+        { lo: 1, hi: 5, hardSpread: 1 },
+        { lo: 2, hi: 7, hardSpread: 2 },
+        { lo: 3, hi: 9, hardSpread: 2 },
+      ],
+    },
+  },
+  {
+    id: "apprentice",
+    name: "Apprentice",
+    audience: "Grades 2 – 3",
+    summary: "Within 30. Times tables 1–5. Light division.",
+    description: "Two-digit addition and subtraction, light multiplication facts (1–5), and clean division by single digits. A gentle on-ramp before the standard tuning.",
+    timerMultiplier: 1.25,
+    quickWindowMultiplier: 1.25,
+    distractorScale: 1,
+    allowedOps: ["+", "-", "*", "/"],
+    ranges: {
+      "+": [
+        null,
+        { lo: 2, hi: 8, hardSpread: 3 },
+        { lo: 3, hi: 14, hardSpread: 4 },
+        { lo: 5, hi: 22, hardSpread: 4 },
+      ],
+      "-": [
+        null,
+        { lo: 2, hi: 10, hardSpread: 3 },
+        { lo: 4, hi: 16, hardSpread: 4 },
+        { lo: 6, hi: 24, hardSpread: 4 },
+      ],
+      "*": [
+        null,
+        { aMin: 1, aMax: 5, bMin: 1, bMax: 5, hardBump: 1 },
+        { aMin: 2, aMax: 6, bMin: 2, bMax: 6, hardBump: 1 },
+        { aMin: 2, aMax: 8, bMin: 2, bMax: 8, hardBump: 2 },
+      ],
+      "/": [
+        null,
+        { divisorMin: 2, divisorMax: 4, quotientMin: 2, quotientMax: 5, hardBump: 1 },
+        { divisorMin: 2, divisorMax: 5, quotientMin: 2, quotientMax: 7, hardBump: 1 },
+        { divisorMin: 2, divisorMax: 6, quotientMin: 2, quotientMax: 8, hardBump: 2 },
+      ],
+    },
+  },
+  {
+    id: "adept",
+    name: "Adept",
+    audience: "Grades 3 – 5",
+    summary: "Standard tuning. Times tables to 12.",
+    description: "The default frontier climb. Two-digit arithmetic, full times tables to 12, and division up to 120 ÷ 12. Timer pressure is honest — fast answers get crit windows.",
+    timerMultiplier: 1.0,
+    quickWindowMultiplier: 1.0,
+    distractorScale: 1,
+    allowedOps: ["+", "-", "*", "/"],
+    ranges: {
+      "+": [
+        null,
+        { lo: 2, hi: 12, hardSpread: 6 },
+        { lo: 8, hi: 26, hardSpread: 6 },
+        { lo: 14, hi: 40, hardSpread: 6 },
+      ],
+      "-": [
+        null,
+        { lo: 3, hi: 14, hardSpread: 6 },
+        { lo: 10, hi: 28, hardSpread: 6 },
+        { lo: 18, hi: 42, hardSpread: 6 },
+      ],
+      "*": [
+        null,
+        { aMin: 2, aMax: 6, bMin: 2, bMax: 6, hardBump: 2 },
+        { aMin: 3, aMax: 9, bMin: 3, bMax: 9, hardBump: 2 },
+        { aMin: 4, aMax: 12, bMin: 4, bMax: 12, hardBump: 2 },
+      ],
+      "/": [
+        null,
+        { divisorMin: 2, divisorMax: 5, quotientMin: 2, quotientMax: 8, hardBump: 2 },
+        { divisorMin: 3, divisorMax: 8, quotientMin: 3, quotientMax: 10, hardBump: 2 },
+        { divisorMin: 4, divisorMax: 10, quotientMin: 4, quotientMax: 12, hardBump: 2 },
+      ],
+    },
+  },
+  {
+    id: "scholar",
+    name: "Scholar",
+    audience: "Grades 5 – 7",
+    summary: "Three-digit sums. 2×1-digit multiplication.",
+    description: "Bigger ranges across the board. Three-digit addition and subtraction by Act 3, multiplication up to 15×12, and division by two-digit divisors. Slightly tighter timers.",
+    timerMultiplier: 0.9,
+    quickWindowMultiplier: 0.95,
+    distractorScale: 3,
+    allowedOps: ["+", "-", "*", "/"],
+    ranges: {
+      "+": [
+        null,
+        { lo: 12, hi: 45, hardSpread: 15 },
+        { lo: 30, hi: 90, hardSpread: 25 },
+        { lo: 60, hi: 180, hardSpread: 40 },
+      ],
+      "-": [
+        null,
+        { lo: 15, hi: 50, hardSpread: 15 },
+        { lo: 40, hi: 100, hardSpread: 25 },
+        { lo: 80, hi: 220, hardSpread: 40 },
+      ],
+      "*": [
+        null,
+        { aMin: 3, aMax: 9, bMin: 3, bMax: 9, hardBump: 3 },
+        { aMin: 5, aMax: 12, bMin: 4, bMax: 12, hardBump: 3 },
+        { aMin: 6, aMax: 15, bMin: 4, bMax: 12, hardBump: 4 },
+      ],
+      "/": [
+        null,
+        { divisorMin: 3, divisorMax: 6, quotientMin: 3, quotientMax: 10, hardBump: 2 },
+        { divisorMin: 4, divisorMax: 9, quotientMin: 5, quotientMax: 15, hardBump: 3 },
+        { divisorMin: 5, divisorMax: 12, quotientMin: 6, quotientMax: 20, hardBump: 3 },
+      ],
+    },
+  },
+  {
+    id: "sage",
+    name: "Sage",
+    audience: "Grade 8+ / Adult",
+    summary: "Two-digit × two-digit. Big ranges.",
+    description: "The hardest climb. Three-digit arithmetic into the 500s, two-digit × two-digit multiplication, and division with multi-digit divisors. Tightest timers on the spire.",
+    timerMultiplier: 0.8,
+    quickWindowMultiplier: 0.9,
+    distractorScale: 8,
+    allowedOps: ["+", "-", "*", "/"],
+    ranges: {
+      "+": [
+        null,
+        { lo: 25, hi: 99, hardSpread: 25 },
+        { lo: 60, hi: 250, hardSpread: 60 },
+        { lo: 120, hi: 500, hardSpread: 100 },
+      ],
+      "-": [
+        null,
+        { lo: 30, hi: 99, hardSpread: 25 },
+        { lo: 80, hi: 300, hardSpread: 60 },
+        { lo: 150, hi: 500, hardSpread: 100 },
+      ],
+      "*": [
+        null,
+        { aMin: 6, aMax: 12, bMin: 5, bMax: 12, hardBump: 3 },
+        { aMin: 8, aMax: 20, bMin: 5, bMax: 15, hardBump: 4 },
+        { aMin: 10, aMax: 25, bMin: 10, bMax: 25, hardBump: 5 },
+      ],
+      "/": [
+        null,
+        { divisorMin: 4, divisorMax: 9, quotientMin: 5, quotientMax: 15, hardBump: 3 },
+        { divisorMin: 5, divisorMax: 15, quotientMin: 8, quotientMax: 25, hardBump: 4 },
+        { divisorMin: 8, divisorMax: 20, quotientMin: 10, quotientMax: 30, hardBump: 5 },
+      ],
     },
   },
 ];
@@ -301,6 +496,105 @@ export const ULTIMATES = {
   },
 };
 
+// Alt ultimates — 2 per legend, each gated by a tier-4 skill-tree node so
+// the final point Frank spends also picks his finisher. The data is shipped
+// here; engine wiring (player.ultimateId, getUltimateConfig lookup by id,
+// tier-4 node selection UI) is a follow-up sprint. Until wiring lands, the
+// engine still resolves a single per-legend ult via ULTIMATES above.
+export const ULTIMATE_VARIANTS = {
+  knight: [
+    {
+      id: "ult-knight-phalanx-wall",
+      name: "Phalanx Wall",
+      legendId: "knight",
+      type: "ULTIMATE",
+      difficulty: "HARD",
+      hotkey: "G",
+      color: "action-ultimate-knight",
+      detail: "Brace into a tower stance: small hit, massive barrier, taunt the room onto you.",
+      tags: ["TARGET", "BLOCK", "TAUNT"],
+      baseDamage: 0.40,
+      blockGain: 36,
+      stunTurns: 0,
+      unlockNodeId: "knight-bulwark-wardbond",
+    },
+    {
+      id: "ult-knight-sundering-stroke",
+      name: "Sundering Stroke",
+      legendId: "knight",
+      type: "ULTIMATE",
+      difficulty: "HARD",
+      hotkey: "G",
+      color: "action-ultimate-knight",
+      detail: "A single overhead cleave with no flourish — pure executioner damage.",
+      tags: ["TARGET", "BURST", "EXECUTE"],
+      baseDamage: 2.40,
+      bonusCritChance: 12,
+      unlockNodeId: "knight-execution-death-sentence",
+    },
+  ],
+  wizard: [
+    {
+      id: "ult-wizard-mirror-cascade",
+      name: "Mirror Cascade",
+      legendId: "wizard",
+      type: "ULTIMATE",
+      difficulty: "HARD",
+      hotkey: "G",
+      color: "action-ultimate-wizard",
+      detail: "Three echoing fragments arc across the room, each striking a different foe.",
+      tags: ["AOE", "MULTI"],
+      baseDamage: 0.70,
+      hits: 3,
+      unlockNodeId: "wizard-sigil-grand-sigil",
+    },
+    {
+      id: "ult-wizard-aether-lance",
+      name: "Aether Lance",
+      legendId: "wizard",
+      type: "ULTIMATE",
+      difficulty: "HARD",
+      hotkey: "G",
+      color: "action-ultimate-wizard",
+      detail: "A coherent arcane lance — single target, surgical, near-guaranteed crit.",
+      tags: ["TARGET", "CRIT", "BURST"],
+      baseDamage: 1.60,
+      bonusCritChance: 35,
+      unlockNodeId: "wizard-arcana-axiom-crown",
+    },
+  ],
+  rogue: [
+    {
+      id: "ult-rogue-veil-step-strike",
+      name: "Veil-Step Strike",
+      legendId: "rogue",
+      type: "ULTIMATE",
+      difficulty: "HARD",
+      hotkey: "G",
+      color: "action-ultimate-rogue",
+      detail: "Vanish, reappear inside guard, land one decisive cut — the next action is free.",
+      tags: ["TARGET", "BURST", "TEMPO"],
+      baseDamage: 1.80,
+      grantsNextActionFree: true,
+      unlockNodeId: "rogue-shadowcraft-vanishing-point",
+    },
+    {
+      id: "ult-rogue-coiled-snare",
+      name: "Coiled Snare",
+      legendId: "rogue",
+      type: "ULTIMATE",
+      difficulty: "HARD",
+      hotkey: "G",
+      color: "action-ultimate-rogue",
+      detail: "A coiled length of wire and a held breath — heavy stun, moderate damage.",
+      tags: ["TARGET", "STUN"],
+      baseDamage: 0.90,
+      stunTurns: 2,
+      unlockNodeId: "rogue-knife-storm-fugue",
+    },
+  ],
+};
+
 export const ACTION_EVOLUTIONS = {
   knight: [
     {
@@ -310,7 +604,7 @@ export const ACTION_EVOLUTIONS = {
       actionId: "atk",
       name: "Shield Rush",
       unlockTitle: "Shield Rush",
-      unlockDescription: "Reforge Strike into a shield charge that hurts one foe and raises barrier.",
+      unlockDescription: "Reforge Frontier Slash into a shield-led charge that breaks the front line.",
       patch: {
         name: "Shield Rush",
         value: 0.9,
@@ -326,7 +620,7 @@ export const ACTION_EVOLUTIONS = {
       actionId: "atk",
       name: "Execution Drive",
       unlockTitle: "Execution Drive",
-      unlockDescription: "Reforge Strike into a two-cut finisher for focused burst and sharper crits.",
+      unlockDescription: "Reforge Frontier Slash into a two-cut finisher honed for the killing line.",
       patch: {
         name: "Execution Drive",
         difficulty: "HARD",
@@ -344,7 +638,7 @@ export const ACTION_EVOLUTIONS = {
       actionId: "blk",
       name: "Bulwark Form",
       unlockTitle: "Bulwark Form",
-      unlockDescription: "Reforge Guard into a heavier stance with stronger barrier and battlefield presence.",
+      unlockDescription: "Reforge Shield Ward into the old immovable stance — heavier, slower, harder to break.",
       patch: {
         name: "Bulwark Form",
         value: 1.35,
@@ -399,7 +693,7 @@ export const ACTION_EVOLUTIONS = {
       actionId: "atk",
       name: "Arc Lash",
       unlockTitle: "Arc Lash",
-      unlockDescription: "Reforge Strike into a roaming spell that lashes through crowded fights.",
+      unlockDescription: "Reforge Arcane Bolt into roaming arcs that hunt across a crowded room.",
       patch: {
         name: "Arc Lash",
         difficulty: "HARD",
@@ -417,7 +711,7 @@ export const ACTION_EVOLUTIONS = {
       actionId: "atk",
       name: "Rune Spear",
       unlockTitle: "Rune Spear",
-      unlockDescription: "Reforge Strike into a ritual spear built for single-target crit pressure.",
+      unlockDescription: "Reforge Arcane Bolt into a single ritual line, drawn for one throat.",
       patch: {
         name: "Rune Spear",
         difficulty: "HARD",
@@ -434,7 +728,7 @@ export const ACTION_EVOLUTIONS = {
       actionId: "aoe",
       name: "Chain Burst",
       unlockTitle: "Chain Burst",
-      unlockDescription: "Reforge Sunder Wave into chained detonations that rake the whole formation.",
+      unlockDescription: "Reforge Frost Nova into a chain of detonations that rake the whole formation.",
       patch: {
         name: "Chain Burst",
         value: 0.45,
@@ -491,7 +785,7 @@ export const ACTION_EVOLUTIONS = {
       actionId: "atk",
       name: "Slice and Dice",
       unlockTitle: "Slice and Dice",
-      unlockDescription: "Reforge Strike into a four-hit flurry that jumps through the melee.",
+      unlockDescription: "Reforge Shiv into a four-hit flurry that jumps through the melee.",
       patch: {
         name: "Slice and Dice",
         value: 0.4,
@@ -508,7 +802,7 @@ export const ACTION_EVOLUTIONS = {
       actionId: "atk",
       name: "Night Bloom",
       unlockTitle: "Night Bloom",
-      unlockDescription: "Reforge Strike into a tighter assassin string with nastier crit windows.",
+      unlockDescription: "Reforge Shiv into a tight assassin string. Quiet. Final.",
       patch: {
         name: "Night Bloom",
         value: 0.56,
@@ -525,7 +819,7 @@ export const ACTION_EVOLUTIONS = {
       actionId: "aoe",
       name: "Fan of Knives",
       unlockTitle: "Fan of Knives",
-      unlockDescription: "Reforge Sunder Wave into a blade storm that ricochets through the whole pack.",
+      unlockDescription: "Reforge Blade Gust into a thrown storm that ricochets through the whole pack.",
       patch: {
         name: "Fan of Knives",
         value: 0.34,
@@ -576,7 +870,7 @@ export const SKILL_TREES = {
       execution: {
         id: "execution",
         name: "Execution",
-        theme: "Focused kills, crit discipline, and finishers.",
+        theme: "Focused finishers, crits on weakened foes, and ultimate burst.",
       },
       ironclad: {
         id: "ironclad",
@@ -590,7 +884,7 @@ export const SKILL_TREES = {
         lane: "vanguard",
         tier: 1,
         label: "Shield Rush",
-        description: "Reforge Strike into a shield charge that damages one foe and raises barrier.",
+        description: "Reforge Frontier Slash into a shield-led charge that breaks the front line.",
         effect: { techniqueId: "knight-shield-rush" },
       },
       {
@@ -610,8 +904,8 @@ export const SKILL_TREES = {
         maxLevel: 3,
         requires: ["knight-vanguard-war-cry"],
         label: "Breaker March",
-        description: "Every correct answer adds extra barrier as you press forward.",
-        effect: { blockOnCorrect: 3 },
+        description: "Every correct answer adds significant barrier as you press forward.",
+        effect: { blockOnCorrect: 4 },
       },
       {
         id: "knight-vanguard-iron-march",
@@ -620,15 +914,15 @@ export const SKILL_TREES = {
         maxLevel: 3,
         requires: ["knight-vanguard-breaker"],
         label: "Iron March",
-        description: "Turn momentum into defense. Your opening strike and barrier gain both improve.",
-        effect: { blockOnCorrect: 3, firstAttackPower: 0.08 },
+        description: "Turn momentum into defense. Opening strikes hit harder and barrier piles deeper with every clean answer.",
+        effect: { firstAttackPower: 0.15, blockOnCorrect: 4 },
       },
       {
         id: "knight-bulwark-form",
         lane: "bulwark",
         tier: 1,
         label: "Bulwark Form",
-        description: "Reforge Guard into a heavier stance built for pure barrier play.",
+        description: "Reforge Shield Ward into the old immovable stance. The line stops here.",
         effect: { techniqueId: "knight-bulwark-form" },
       },
       {
@@ -638,8 +932,8 @@ export const SKILL_TREES = {
         maxLevel: 3,
         requires: ["knight-bulwark-form"],
         label: "Oath Of Iron",
-        description: "Your Guard grows sturdier and every defensive play holds longer.",
-        effect: { guardPower: 0.22 },
+        description: "Your Guard grows substantially sturdier and every defensive play holds longer.",
+        effect: { guardPower: 0.25 },
       },
       {
         id: "knight-bulwark-aegis",
@@ -657,15 +951,15 @@ export const SKILL_TREES = {
         maxLevel: 3,
         requires: ["knight-bulwark-aegis"],
         label: "Wardbond",
-        description: "Turn every correct answer into more wall. Your defense becomes self-feeding.",
-        effect: { guardPower: 0.10, blockOnCorrect: 5 },
+        description: "Defense becomes self-feeding. Guard scales up and every clean answer drops a stack of barrier.",
+        effect: { guardPower: 0.15, blockOnCorrect: 6 },
       },
       {
         id: "knight-execution-drive",
         lane: "execution",
         tier: 1,
         label: "Execution Drive",
-        description: "Reforge Strike into a double-cut finisher for focused single-target burst.",
+        description: "Reforge Frontier Slash into a two-cut finisher honed for the killing line.",
         effect: { techniqueId: "knight-execution-drive" },
       },
       {
@@ -676,7 +970,7 @@ export const SKILL_TREES = {
         requires: ["knight-execution-drive"],
         label: "Headsman Focus",
         description: "Your finishing lines hit much harder when they crit.",
-        effect: { critPowerBonus: 0.18 },
+        effect: { critPowerBonus: 0.22 },
       },
       {
         id: "knight-execution-momentum",
@@ -685,7 +979,7 @@ export const SKILL_TREES = {
         maxLevel: 1,
         requires: ["knight-execution-focus"],
         label: "Marshal's Oath",
-        description: "Open the sealed utility slot with a command oath. For 3 turns, attacks hit harder and clean answers raise barrier.",
+        description: "Open the sealed utility slot with a command oath. For 3 turns, your opening action costs less and clean answers raise barrier.",
         effect: { techniqueId: "knight-marshals-oath", firstActionDiscount: 1 },
       },
       {
@@ -695,8 +989,8 @@ export const SKILL_TREES = {
         maxLevel: 3,
         requires: ["knight-execution-momentum"],
         label: "Death Sentence",
-        description: "Turn crits and your ultimate into true finishing blows.",
-        effect: { critPowerBonus: 0.12, ultimatePowerBonus: 0.28 },
+        description: "Hunt the wounded. Crits hit harder, foes below 35% HP take huge crit chance bonuses, and your ultimate finishes bigger.",
+        effect: { critPowerBonus: 0.18, critOnLowHpEnemy: 25, ultimatePowerBonus: 0.30 },
       },
       {
         id: "knight-ironclad-war-hardened",
@@ -704,7 +998,7 @@ export const SKILL_TREES = {
         tier: 1,
         maxLevel: 3,
         label: "War-Hardened",
-        description: "Battle experience sharpens the very first hit you throw each turn.",
+        description: "Years of campaigns sharpen the opening blow. Your first attack each turn lands harder.",
         effect: { firstAttackPower: 0.12 },
       },
       {
@@ -713,7 +1007,7 @@ export const SKILL_TREES = {
         tier: 2,
         maxLevel: 3,
         label: "Veteran's Instinct",
-        description: "Fast reads open better crit windows through veteran instinct.",
+        description: "An old soldier's eye sees the gap a half-beat early. Fast, clean answers find sharper crits.",
         effect: { quickCritChance: 12 },
       },
       {
@@ -723,8 +1017,8 @@ export const SKILL_TREES = {
         maxLevel: 3,
         requires: ["knight-ironclad-veterans-instinct"],
         label: "Holdfast Doctrine",
-        description: "Every clean answer braces the line with extra barrier.",
-        effect: { blockOnCorrect: 2 },
+        description: "Hold the line, the old way. Every clean answer plates you in extra barrier.",
+        effect: { blockOnCorrect: 3 },
       },
       {
         id: "knight-ironclad-crown-guard",
@@ -733,8 +1027,8 @@ export const SKILL_TREES = {
         maxLevel: 1,
         requires: ["knight-ironclad-holdfast-doctrine"],
         label: "Crown Guard",
-        description: "Stand firm. Your Guard toughens and your ultimate arrives sooner.",
-        effect: { guardPower: 0.08, ultimateThresholdDelta: -1 },
+        description: "The kingsguard's stance. Your Guard hits harder, and the moment of your ultimate arrives sooner.",
+        effect: { guardPower: 0.12, ultimateThresholdDelta: -2 },
       },
     ],
   },
@@ -769,7 +1063,7 @@ export const SKILL_TREES = {
         lane: "stormweaving",
         tier: 1,
         label: "Arc Lash",
-        description: "Reforge Strike into a three-hit roaming spell for crowded fights.",
+        description: "Reforge Arcane Bolt into roaming arcs that hunt across a crowded room.",
         effect: { techniqueId: "wizard-arc-lash" },
       },
       {
@@ -780,7 +1074,7 @@ export const SKILL_TREES = {
         requires: ["wizard-storm-arc-lash"],
         label: "Storm Memory",
         description: "Your HARD spells strike harder once the storm circuit is humming.",
-        effect: { hardActionPower: 0.15 },
+        effect: { hardActionPower: 0.18 },
       },
       {
         id: "wizard-storm-feedback-halo",
@@ -790,7 +1084,7 @@ export const SKILL_TREES = {
         requires: ["wizard-storm-storm-memory"],
         label: "Feedback Halo",
         description: "Critical spells arc into nearby foes, and your first HARD spell crit each turn refunds energy.",
-        effect: { critSplash: 0.28, spellEnergyRefundOnCrit: 1 },
+        effect: { critSplash: 0.32, spellEnergyRefundOnCrit: 1 },
       },
       {
         id: "wizard-storm-tempest-core",
@@ -799,15 +1093,15 @@ export const SKILL_TREES = {
         maxLevel: 3,
         requires: ["wizard-storm-feedback-halo"],
         label: "Tempest Core",
-        description: "Your storm crits spread farther and tear through nearby enemies.",
-        effect: { critSplash: 0.22, hardActionPower: 0.10 },
+        description: "Your storm crits spread farther and HARD spells tear deeper.",
+        effect: { critSplash: 0.28, hardActionPower: 0.15 },
       },
       {
         id: "wizard-sigil-rune-spear",
         lane: "sigilcraft",
         tier: 1,
         label: "Rune Spear",
-        description: "Reforge Strike into a ritual bolt tuned for focused crit windows.",
+        description: "Reforge Arcane Bolt into a single ritual line, drawn for one throat.",
         effect: { techniqueId: "wizard-rune-spear" },
       },
       {
@@ -818,7 +1112,7 @@ export const SKILL_TREES = {
         requires: ["wizard-sigil-rune-spear"],
         label: "Perfect Geometry",
         description: "Fast, clean answers widen the crit window for precision casting.",
-        effect: { quickCritChance: 15 },
+        effect: { quickCritChance: 18 },
       },
       {
         id: "wizard-sigil-astral-pin",
@@ -837,25 +1131,25 @@ export const SKILL_TREES = {
         requires: ["wizard-sigil-astral-pin"],
         label: "Grand Sigil",
         description: "Precision crits land with devastating ritual force.",
-        effect: { critPowerBonus: 0.22 },
+        effect: { critPowerBonus: 0.28 },
       },
       {
         id: "wizard-cataclysm-chain-burst",
         lane: "cataclysm",
         tier: 1,
         label: "Chain Burst",
-        description: "Reforge Sunder Wave into five chained detonations for packed fights.",
+        description: "Reforge Frost Nova into five chained detonations for packed fights.",
         effect: { techniqueId: "wizard-chain-burst" },
       },
       {
         id: "wizard-cataclysm-starfall-reserve",
         lane: "cataclysm",
         tier: 2,
-        maxLevel: 1,
+        maxLevel: 3,
         requires: ["wizard-cataclysm-chain-burst"],
-        label: "Starfall Reserve",
-        description: "Gain deeper reserves so your spell strings can run longer.",
-        effect: { bonusEnergyPerTurn: 1 },
+        label: "Starfall Opening",
+        description: "Your first attack spell each turn ignites with extra power.",
+        effect: { firstAttackPower: 0.20 },
       },
       {
         id: "wizard-cataclysm-furnace-heart",
@@ -864,8 +1158,8 @@ export const SKILL_TREES = {
         maxLevel: 3,
         requires: ["wizard-cataclysm-starfall-reserve"],
         label: "Furnace Heart",
-        description: "Your first attack spell each turn hits harder, and Arcstorm Nova hits harder too.",
-        effect: { firstAttackPower: 0.18, ultimatePowerBonus: 0.25 },
+        description: "Arcstorm Nova hits with battle-ending force.",
+        effect: { ultimatePowerBonus: 0.30 },
       },
       {
         id: "wizard-cataclysm-endless-fall",
@@ -874,7 +1168,7 @@ export const SKILL_TREES = {
         maxLevel: 1,
         requires: ["wizard-cataclysm-furnace-heart"],
         label: "Overchannel",
-        description: "Open the sealed utility slot with a volatile trance. For 2 turns, HARD spells hit harder and crit much harder.",
+        description: "Open the sealed utility slot with a volatile trance and gain +1 energy each turn while it sustains. The only passive energy source in the kit.",
         effect: { techniqueId: "wizard-overchannel", bonusEnergyPerTurn: 1 },
       },
       {
@@ -884,7 +1178,7 @@ export const SKILL_TREES = {
         maxLevel: 3,
         label: "Arcane Hunger",
         description: "Hard casts hit harder as your arcane appetite grows.",
-        effect: { hardActionPower: 0.12 },
+        effect: { hardActionPower: 0.15 },
       },
       {
         id: "wizard-arcana-pattern-sight",
@@ -893,7 +1187,7 @@ export const SKILL_TREES = {
         maxLevel: 3,
         label: "Pattern Sight",
         description: "Quick casts open wider crit windows through sharper pattern reading.",
-        effect: { quickCritChance: 12 },
+        effect: { quickCritChance: 14 },
       },
       {
         id: "wizard-arcana-ley-reservoir",
@@ -902,8 +1196,8 @@ export const SKILL_TREES = {
         maxLevel: 1,
         requires: ["wizard-arcana-pattern-sight"],
         label: "Ley Reservoir",
-        description: "A hidden reserve of ether grants +1 energy every turn.",
-        effect: { bonusEnergyPerTurn: 1 },
+        description: "Land a HARD spell quickly and ether floods back. Refunds 1 energy on every quick HARD correct answer.",
+        effect: { bonusEnergyOnHardCorrect: 1 },
       },
       {
         id: "wizard-arcana-axiom-crown",
@@ -912,8 +1206,8 @@ export const SKILL_TREES = {
         maxLevel: 3,
         requires: ["wizard-arcana-ley-reservoir"],
         label: "Axiom Crown",
-        description: "Pure theory lets Focus drive deeper spell crits.",
-        effect: { focusCritBoost: 0.08 },
+        description: "Pure theory deepens crit damage from Focus, and a misfire leaves the next cast costing nothing.",
+        effect: { focusCritBoost: 0.10, nextActionFreeAfterMiss: true },
       },
     ],
   },
@@ -939,7 +1233,7 @@ export const SKILL_TREES = {
       shadowcraft: {
         id: "shadowcraft",
         name: "Shadowcraft",
-        theme: "Universal rogue conditioning. No lane lock. Always open.",
+        theme: "Tempo recovery and evasion. No lane lock. Always open.",
       },
     },
     nodes: [
@@ -948,7 +1242,7 @@ export const SKILL_TREES = {
         lane: "blood-dance",
         tier: 1,
         label: "Slice and Dice",
-        description: "Reforge Strike into a roaming flurry that thrives on tempo.",
+        description: "Reforge Shiv into a roaming flurry that finds rhythm and never lets it go.",
         effect: { techniqueId: "rogue-slice-and-dice" },
       },
       {
@@ -958,18 +1252,18 @@ export const SKILL_TREES = {
         maxLevel: 3,
         requires: ["rogue-blood-slice-and-dice"],
         label: "Crescendo",
-        description: "Every combo stack adds more damage to your dance.",
-        effect: { comboPowerPerStackBonus: 0.04 },
+        description: "Every combo stack adds significantly more damage to your dance.",
+        effect: { comboPowerPerStackBonus: 0.06 },
       },
       {
         id: "rogue-blood-butchers-step",
         lane: "blood-dance",
         tier: 3,
-        maxLevel: 3,
+        maxLevel: 1,
         requires: ["rogue-blood-crescendo"],
         label: "Butcher's Step",
-        description: "Your opening attack hits harder once the rhythm is set.",
-        effect: { firstAttackPower: 0.14 },
+        description: "The dance never falls fully apart. Within an act, your combo cannot drop below 3.",
+        effect: { comboFloorOnAct: 3 },
       },
       {
         id: "rogue-blood-killing-frenzy",
@@ -978,15 +1272,15 @@ export const SKILL_TREES = {
         maxLevel: 3,
         requires: ["rogue-blood-butchers-step"],
         label: "Killing Frenzy",
-        description: "Combo bites harder and you gain extra energy to keep the assault rolling.",
-        effect: { comboPowerPerStackBonus: 0.02, bonusEnergyPerTurn: 1 },
+        description: "Combo bites harder and a long combo (above 5 stacks) heals you on every clean hit.",
+        effect: { comboPowerPerStackBonus: 0.04, comboHealOnHit: 1 },
       },
       {
         id: "rogue-moon-night-bloom",
         lane: "moon-veil",
         tier: 1,
         label: "Night Bloom",
-        description: "Reforge Strike into a tight assassin string with deadlier crit windows.",
+        description: "Reforge Shiv into a tight assassin string. Quiet. Final.",
         effect: { techniqueId: "rogue-night-bloom" },
       },
       {
@@ -997,7 +1291,7 @@ export const SKILL_TREES = {
         requires: ["rogue-moon-night-bloom"],
         label: "Grave Precision",
         description: "Quick answers open wider crit windows under the veil.",
-        effect: { quickCritChance: 12 },
+        effect: { quickCritChance: 15 },
       },
       {
         id: "rogue-moon-black-lotus",
@@ -1007,7 +1301,7 @@ export const SKILL_TREES = {
         requires: ["rogue-moon-grave-precision"],
         label: "Cull of the Night",
         description: "Open the sealed utility slot with an assassin stance. For 2 turns, crits hit far harder and quick cuts find kill windows.",
-        effect: { techniqueId: "rogue-cull-of-the-night", critPowerBonus: 0.12 },
+        effect: { techniqueId: "rogue-cull-of-the-night", critPowerBonus: 0.15 },
       },
       {
         id: "rogue-moon-eclipse-mark",
@@ -1017,14 +1311,14 @@ export const SKILL_TREES = {
         requires: ["rogue-moon-black-lotus"],
         label: "Eclipse Mark",
         description: "Every critical hit returns energy so the blade never stops moving.",
-        effect: { critPowerBonus: 0.12, critEnergyRefund: 1 },
+        effect: { critPowerBonus: 0.15, critEnergyRefund: 1 },
       },
       {
         id: "rogue-knife-fan-of-knives",
         lane: "knivesong",
         tier: 1,
         label: "Fan of Knives",
-        description: "Reforge Sunder Wave into a thrown storm that ricochets through the whole field.",
+        description: "Reforge Blade Gust into a thrown storm that ricochets through the whole field.",
         effect: { techniqueId: "rogue-fan-of-knives" },
       },
       {
@@ -1055,7 +1349,7 @@ export const SKILL_TREES = {
         requires: ["rogue-knife-returning-storm"],
         label: "Storm Fugue",
         description: "Your hard knife arts spread damage across the whole fight.",
-        effect: { hardActionPower: 0.15, critSplash: 0.15 },
+        effect: { hardActionPower: 0.18, critSplash: 0.20 },
       },
       {
         id: "rogue-shadowcraft-light-step",
@@ -1073,27 +1367,27 @@ export const SKILL_TREES = {
         maxLevel: 3,
         label: "Blade Sense",
         description: "Fast reads open deadlier crit chances through blade instinct.",
-        effect: { quickCritChance: 12 },
+        effect: { quickCritChance: 14 },
       },
       {
         id: "rogue-shadowcraft-cutpurse-instinct",
         lane: "shadowcraft",
         tier: 3,
-        maxLevel: 3,
+        maxLevel: 1,
         requires: ["rogue-shadowcraft-blade-sense"],
         label: "Cutpurse Instinct",
-        description: "The first opening you spot each turn takes extra damage.",
-        effect: { firstAttackPower: 0.12 },
+        description: "Recover from a stumble. The very next action after a miss costs no energy.",
+        effect: { nextActionFreeAfterMiss: true },
       },
       {
         id: "rogue-shadowcraft-vanishing-point",
         lane: "shadowcraft",
         tier: 4,
-        maxLevel: 1,
+        maxLevel: 3,
         requires: ["rogue-shadowcraft-cutpurse-instinct"],
         label: "Vanishing Point",
-        description: "A stumble no longer ruins the whole pattern. Misses only cut combo in half.",
-        effect: { softComboBreak: true },
+        description: "A stumble no longer ruins the whole pattern. Misses only halve combo, and your crits cut deeper.",
+        effect: { softComboBreak: true, critPowerBonus: 0.10 },
       },
     ],
   },
@@ -1372,6 +1666,59 @@ export const RELICS = [
     description: "Gain +1 energy every turn and 1 extra energy on the opening turn.",
     apply: { bonusEnergyPerTurn: 1, openingTurnEnergy: 1 },
   },
+
+  // ── Build-defining legendaries (4) ─────────────────────────────────────
+  {
+    id: "thunder-doctrine",
+    name: "Thunder Doctrine",
+    rarity: "LEGENDARY",
+    description: "HARD answers refund 1 energy. The opening turn carries +1 energy and HARD skills hit 20% harder.",
+    apply: { bonusEnergyOnHardCorrect: 1, openingTurnEnergy: 1, hardActionPower: 0.20 },
+  },
+  {
+    id: "first-strike-codex",
+    name: "First-Strike Codex",
+    rarity: "LEGENDARY",
+    description: "Your first attack each turn hits 50% harder, and your first crit each turn refunds 1 energy.",
+    apply: { firstAttackPower: 0.50, critEnergyRefund: 1 },
+  },
+  {
+    id: "executioner-glyph",
+    name: "Executioner Glyph",
+    rarity: "LEGENDARY",
+    description: "Bloodied enemies (≤35% HP) draw +30% crit chance, and crits spill 40% splash.",
+    apply: { critOnLowHpEnemy: 30, critSplash: 0.40 },
+  },
+  {
+    id: "eternity-engine",
+    name: "Eternity Engine",
+    rarity: "LEGENDARY",
+    description: "Gain +1 energy every turn, your ultimate readies 2 energy sooner, and Guard plates 15% harder.",
+    apply: { bonusEnergyPerTurn: 1, ultimateThresholdDelta: -2, guardPower: 0.15 },
+  },
+
+  // ── Synergy epics (3) ──────────────────────────────────────────────────
+  {
+    id: "resonant-glass",
+    name: "Resonant Glass",
+    rarity: "EPIC",
+    description: "Crits land 25% harder, and the first crit each turn refunds 1 energy.",
+    apply: { critPowerBonus: 0.25, critEnergyRefund: 1 },
+  },
+  {
+    id: "stalwart-ledger",
+    name: "Stalwart Ledger",
+    rarity: "EPIC",
+    description: "Guard plates 20% harder, every correct answer raises 4 block, and Guard restores 3 HP.",
+    apply: { guardPower: 0.20, blockOnCorrect: 4, guardHealOnCorrect: 3 },
+  },
+  {
+    id: "tempo-breaker",
+    name: "Tempo Breaker",
+    rarity: "EPIC",
+    description: "Your first action each turn costs 1 less energy, and a miss grants the next action free.",
+    apply: { firstActionDiscount: 1, nextActionFreeAfterMiss: true },
+  },
 ];
 
 export const ENEMY_ARCHETYPES = {
@@ -1394,6 +1741,20 @@ export const ENEMY_ARCHETYPES = {
     { id: "gatekeeper", name: "Gatekeeper Colossus", icon: "G", asset: null, hp: 690, damage: 22, acts: [1] },
     { id: "sigil-engine", name: "Sigil Engine", icon: "S", asset: null, hp: 860, damage: 25, acts: [2] },
     { id: "obelisk-heart", name: "Obelisk Heart", icon: "O", asset: null, hp: 980, damage: 30, acts: [3] },
+
+    // Second per-act boss — fully War-Room-2 unlocked, diversifies the act-end pool.
+    { id: "iron-pulpit",  name: "Iron Pulpit",  icon: "I", asset: null, hp: 720,  damage: 21, acts: [1] },
+    { id: "horologium",   name: "Horologium",   icon: "H", asset: null, hp: 820,  damage: 27, acts: [2] },
+    { id: "null-monarch", name: "Null Monarch", icon: "N", asset: null, hp: 920,  damage: 33, acts: [3] },
+
+    // Spire-signature bosses — final-act climactic fights themed to each spire.
+    // `spireId` is data scaffolding; engine spire-filtering is a follow-up. Until
+    // the filter lands, these enrich the act-3 boss pool everywhere.
+    { id: "sum-archon",         name: "Sum Archon",         icon: "+", asset: null, hp: 950,  damage: 28, acts: [3], spireId: "addition" },
+    { id: "rust-cleaver",       name: "Rust Cleaver",       icon: "-", asset: null, hp: 880,  damage: 32, acts: [3], spireId: "subtraction" },
+    { id: "product-leviathan",  name: "Product Leviathan",  icon: "x", asset: null, hp: 1080, damage: 30, acts: [3], spireId: "multiplication" },
+    { id: "divisor-saint",      name: "Divisor Saint",      icon: "/", asset: null, hp: 920,  damage: 30, acts: [3], spireId: "division" },
+    { id: "equation-crown",     name: "Equation Crown",     icon: "=", asset: null, hp: 1180, damage: 33, acts: [3], spireId: "mixed" },
   ],
 };
 
@@ -1401,7 +1762,7 @@ export const BASE_UNLOCKS = {
   starting: {
     spires: ["addition"],
     relics: ["quick-slate", "iron-theorem", "vital-reserve", "merchant-ledger"],
-    events: ["whispering-slate", "blood-merchant", "camp-of-echoes", "oracle-flame", "omens-hand", "ember-greenhouse", "wayfinder-cairn"],
+    events: ["whispering-slate", "blood-merchant", "camp-of-echoes", "oracle-flame", "omens-hand", "ember-greenhouse", "wayfinder-cairn", "pilgrim-bell", "field-anvil", "surveyor-kit"],
     monsters: ["fiend", "fang"],
     elites: ["guard"],
     bosses: ["sentinel"],
@@ -1451,7 +1812,7 @@ export const BASE_UNLOCKS = {
       title: "Hard-Choice Records",
       description: "Older records are unsealed, and stranger bargains begin to answer the climb.",
       unlocks: {
-        events: ["shattered-dynamo", "mirror-of-edges", "sealed-vault", "hollow-apothecary", "glass-sanctum"],
+        events: ["shattered-dynamo", "mirror-of-edges", "sealed-vault", "hollow-apothecary", "glass-sanctum", "witch-lantern", "penitent-mill", "ash-monastery", "reliquary-well"],
       },
     },
     {
@@ -1460,7 +1821,7 @@ export const BASE_UNLOCKS = {
       title: "Forbidden Routes",
       description: "The black ledgers are opened, drawing in rarer vows and riskier pacts.",
       unlocks: {
-        events: ["oath-pyre", "ghost-market", "black-banner", "tally-of-crows"],
+        events: ["oath-pyre", "ghost-market", "black-banner", "tally-of-crows", "fracture-dais", "ember-tribunal", "moon-reliquary", "gallows-ledger"],
       },
     },
   ],
@@ -1480,7 +1841,7 @@ export const BASE_UNLOCKS = {
       title: "Mythic Engine",
       description: "The deeper furnaces ignite, drawing forth rarer instruments of power.",
       unlocks: {
-        relics: ["assassin-abacus", "arcane-engine", "focus-prism", "stability-glyph", "battery-core", "tempo-sigil", "war-drum", "glass-compass", "soul-prism", "night-market-coin", "forked-fang", "gale-cutters", "thorn-codex", "cathedral-battery"],
+        relics: ["assassin-abacus", "arcane-engine", "focus-prism", "stability-glyph", "battery-core", "tempo-sigil", "war-drum", "glass-compass", "soul-prism", "night-market-coin", "forked-fang", "gale-cutters", "thorn-codex", "cathedral-battery", "thunder-doctrine", "first-strike-codex", "executioner-glyph", "eternity-engine", "resonant-glass", "stalwart-ledger", "tempo-breaker"],
       },
     },
   ],
@@ -1503,7 +1864,7 @@ export const BASE_UNLOCKS = {
       unlocks: {
         monsters: ["priest"],
         elites: ["breaker"],
-        bosses: ["gatekeeper", "sigil-engine", "obelisk-heart"],
+        bosses: ["gatekeeper", "sigil-engine", "obelisk-heart", "iron-pulpit", "horologium", "null-monarch", "sum-archon", "rust-cleaver", "product-leviathan", "divisor-saint", "equation-crown"],
       },
     },
   ],
@@ -1542,6 +1903,215 @@ export const SHOP_TEMPLATE = [
   { id: "stat-focus", kind: "STAT", stat: "focus", label: "Clarity Draught", baseCost: 90 },
   { id: "stat-str", kind: "STAT", stat: "str", label: "Iron Draft", baseCost: 90 },
   { id: "remove-weakness", kind: "REMOVE", label: "Purge Doubt", baseCost: 150 },
+];
+
+export const RUN_MODIFIERS = [
+  {
+    id: "fury-censer",
+    name: "Fury Censer",
+    tone: "boon",
+    battles: 2,
+    description: "Next 2 battles: attacks and room-wide skills hit harder.",
+    apply: { attackPower: 0.18, aoePower: 0.18 },
+  },
+  {
+    id: "storm-battery",
+    name: "Storm Battery",
+    tone: "boon",
+    battles: 1,
+    description: "Next battle: start with +2 energy and hit harder with HARD actions.",
+    apply: { openingTurnEnergy: 2, hardActionPower: 0.18 },
+  },
+  {
+    id: "warding-echo",
+    name: "Warding Echo",
+    tone: "boon",
+    battles: 2,
+    description: "Next 2 battles: begin with extra barrier and strengthen Guard.",
+    apply: { battleStartBlock: 18, guardPower: 0.18 },
+  },
+  {
+    id: "glass-curse",
+    name: "Glass Curse",
+    tone: "curse",
+    battles: 2,
+    description: "Next 2 battles: crits strike harder, but Guard is weakened.",
+    apply: { critPowerBonus: 0.3, guardPower: -0.25 },
+  },
+  {
+    id: "crow-contract",
+    name: "Crow Contract",
+    tone: "bargain",
+    battles: 2,
+    description: "Next 2 battles: spoils payout rises, but your defense softens.",
+    apply: { spoilGoldPct: 0.35, guardPower: -0.15 },
+  },
+
+  // ── Boons (8) ──────────────────────────────────────────────────────────
+  {
+    id: "wraith-dance",
+    name: "Wraith Dance",
+    tone: "boon",
+    battles: 2,
+    description: "Next 2 battles: combo never falls below 4, and each stack carries 2% more weight.",
+    apply: { comboFloorOnAct: 4, comboPowerPerStackBonus: 0.02 },
+  },
+  {
+    id: "ironclad-march",
+    name: "Ironclad March",
+    tone: "boon",
+    battles: 3,
+    description: "Next 3 battles: enter at +14 block and Guard plates 10% harder.",
+    apply: { battleStartBlock: 14, guardPower: 0.10 },
+  },
+  {
+    id: "tide-of-coin",
+    name: "Tide Of Coin",
+    tone: "boon",
+    battles: 1,
+    description: "Next battle: spoils payout swells by 50%.",
+    apply: { spoilGoldPct: 0.50 },
+  },
+  {
+    id: "lantern-procession",
+    name: "Lantern Procession",
+    tone: "boon",
+    battles: 2,
+    description: "Next 2 battles: restoration arts heal 30% more, and combo hits trickle 1 HP.",
+    apply: { restorationHealPower: 0.30, comboHealOnHit: 1 },
+  },
+  {
+    id: "quick-tempo",
+    name: "Quick Tempo",
+    tone: "boon",
+    battles: 1,
+    description: "Next battle: quick answers crit 18% more often, and the first action costs 1 less energy.",
+    apply: { quickCritChance: 18, firstActionDiscount: 1 },
+  },
+  {
+    id: "surveyor-eye",
+    name: "Surveyor's Eye",
+    tone: "boon",
+    battles: 2,
+    description: "Next 2 battles: roll 1 extra herb on victory and gain 18% more spoils gold.",
+    apply: { bonusHerbDrops: 1, spoilGoldPct: 0.18 },
+  },
+  {
+    id: "brass-vigil",
+    name: "Brass Vigil",
+    tone: "boon",
+    battles: 2,
+    description: "Next 2 battles: enter at +12 block and the opening turn carries +1 energy.",
+    apply: { battleStartBlock: 12, openingTurnEnergy: 1 },
+  },
+  {
+    id: "focus-flare",
+    name: "Focus Flare",
+    tone: "boon",
+    battles: 1,
+    description: "Next battle: Focus weighs harder on crit, and crit power surges by 20%.",
+    apply: { focusCritBoost: 0.18, critPowerBonus: 0.20 },
+  },
+
+  // ── Bargains (6) ───────────────────────────────────────────────────────
+  {
+    id: "duelist-pact",
+    name: "Duelist Pact",
+    tone: "bargain",
+    battles: 2,
+    description: "Next 2 battles: single-target hits 30% harder, but room-wide skills hit 20% softer.",
+    apply: { attackPower: 0.30, aoePower: -0.20 },
+  },
+  {
+    id: "wraith-bargain",
+    name: "Wraith Bargain",
+    tone: "bargain",
+    battles: 2,
+    description: "Next 2 battles: crits strike 40% harder, but Guard plates 20% weaker.",
+    apply: { critPowerBonus: 0.40, guardPower: -0.20 },
+  },
+  {
+    id: "forge-fever",
+    name: "Forge Fever",
+    tone: "bargain",
+    battles: 2,
+    description: "Next 2 battles: attacks and AOE hit 30% harder, but the ultimate takes 3 more energy to ready.",
+    apply: { attackPower: 0.30, aoePower: 0.30, ultimateThresholdDelta: 3 },
+  },
+  {
+    id: "blood-archives",
+    name: "Blood Archives",
+    tone: "bargain",
+    battles: 2,
+    description: "Next 2 battles: HARD skills hit 40% harder, but basic strikes lose 15% bite.",
+    apply: { hardActionPower: 0.40, attackPower: -0.15 },
+  },
+  {
+    id: "tide-binder",
+    name: "Tide Binder",
+    tone: "bargain",
+    battles: 2,
+    description: "Next 2 battles: gain +1 energy each turn, but the ultimate takes 3 more energy to ready.",
+    apply: { bonusEnergyPerTurn: 1, ultimateThresholdDelta: 3 },
+  },
+  {
+    id: "iron-pact",
+    name: "Iron Pact",
+    tone: "bargain",
+    battles: 2,
+    description: "Next 2 battles: enter at +24 block, but single-target attacks hit 18% softer.",
+    apply: { battleStartBlock: 24, attackPower: -0.18 },
+  },
+
+  // ── Curses (6) ─────────────────────────────────────────────────────────
+  {
+    id: "fading-light",
+    name: "Fading Light",
+    tone: "curse",
+    battles: 2,
+    description: "Next 2 battles: quick-crit windows shrink by 25 and attacks hit 10% softer.",
+    apply: { quickCritChance: -25, attackPower: -0.10 },
+  },
+  {
+    id: "brittle-form",
+    name: "Brittle Form",
+    tone: "curse",
+    battles: 2,
+    description: "Next 2 battles: starting block falls by 10, and Guard plates 30% weaker.",
+    apply: { guardPower: -0.30, battleStartBlock: -10 },
+  },
+  {
+    id: "burdened-march",
+    name: "Burdened March",
+    tone: "curse",
+    battles: 1,
+    description: "Next battle: turns generate 1 less energy.",
+    apply: { bonusEnergyPerTurn: -1 },
+  },
+  {
+    id: "clouded-mind",
+    name: "Clouded Mind",
+    tone: "curse",
+    battles: 2,
+    description: "Next 2 battles: Focus contributes 20% less to crit, and crits strike 20% softer.",
+    apply: { focusCritBoost: -0.20, critPowerBonus: -0.20 },
+  },
+  {
+    id: "waning-arts",
+    name: "Waning Arts",
+    tone: "curse",
+    battles: 2,
+    description: "Next 2 battles: restoration arts heal 40% less, and tonics restore 30% less.",
+    apply: { restorationHealPower: -0.40, potionHealPower: -0.30 },
+  },
+  {
+    id: "anchor-of-rust",
+    name: "Anchor Of Rust",
+    tone: "curse",
+    battles: 1,
+    description: "Next battle: the first action each turn costs 1 extra energy.",
+    apply: { firstActionDiscount: -1 },
+  },
 ];
 
 export const EVENT_TEMPLATES = [
@@ -1720,6 +2290,81 @@ export const EVENT_TEMPLATES = [
     ],
   },
   {
+    id: "pilgrim-bell",
+    title: "Pilgrim Bell",
+    text: "A bronze frontier bell hangs over a cairn of spent chalk. Old pilgrims once rang it before their final climb and left a lesson beneath the rope.",
+    choices: [
+      {
+        id: "ring-the-first-toll",
+        label: "Ring The First Toll",
+        description: "Awaken your sealed ultimate for this climb.",
+        effect: { unlockUltimate: true },
+      },
+      {
+        id: "tie-a-votive",
+        label: "Tie A Votive",
+        description: "Gain 1 skill point and 1 White Herb.",
+        effect: { skillPoints: 1, herbs: { white: 1 } },
+      },
+      {
+        id: "melt-the-wax",
+        label: "Melt The Wax",
+        description: "Bottle 1 White Tonic and 1 Blue Tonic from the pilgrims' stores.",
+        effect: { potions: { white: 1, blue: 1 } },
+      },
+    ],
+  },
+  {
+    id: "field-anvil",
+    title: "Field Anvil",
+    text: "A travel anvil sits under a canvas of old campaign marks. It offers one clean improvement, if you know which part of your kit matters most today.",
+    choices: [
+      {
+        id: "temper-the-edge",
+        label: "Temper The Edge",
+        description: "Gain +1 STR and upgrade your primary strike by 1 level.",
+        effect: { stats: { str: 1 }, upgradeActionId: "atk", upgradeActionLevels: 1 },
+      },
+      {
+        id: "brace-the-line",
+        label: "Brace The Line",
+        description: "Gain +1 VIT and upgrade Guard by 1 level.",
+        effect: { stats: { vit: 1 }, upgradeActionId: "blk", upgradeActionLevels: 1 },
+      },
+      {
+        id: "etch-the-pattern",
+        label: "Etch The Pattern",
+        description: "Gain +1 Focus and upgrade your room-clearing art by 1 level.",
+        effect: { stats: { focus: 1 }, upgradeActionId: "aoe", upgradeActionLevels: 1 },
+      },
+    ],
+  },
+  {
+    id: "surveyor-kit",
+    title: "Surveyor's Kit",
+    text: "A dead surveyor's case lies open beside a split route marker. Inside are maps, provisions, and just enough coin to change a climb.",
+    choices: [
+      {
+        id: "open-the-ledger",
+        label: "Open The Ledger",
+        description: "Gain 70 gold and 1 skill point.",
+        effect: { gold: 70, skillPoints: 1 },
+      },
+      {
+        id: "take-the-provisions",
+        label: "Take The Provisions",
+        description: "Gain 1 White Herb, 1 Yellow Herb, 1 Blue Herb, and 1 White Tonic.",
+        effect: { herbs: { white: 1, yellow: 1, blue: 1 }, potions: { white: 1 } },
+      },
+      {
+        id: "pocket-the-chalk",
+        label: "Pocket The Chalk",
+        description: "Gain +1 Focus and sharpen your lowest HARD action by 1 level.",
+        effect: { stats: { focus: 1 }, upgradeLowestHard: 1 },
+      },
+    ],
+  },
+  {
     id: "shattered-dynamo",
     title: "Shattered Dynamo",
     text: "A cracked engine still beats beneath the stone. You can bind its rhythm, but the machine asks for payment first.",
@@ -1820,6 +2465,106 @@ export const EVENT_TEMPLATES = [
     ],
   },
   {
+    id: "penitent-mill",
+    title: "Penitent Mill",
+    text: "A punishment mill still turns, powered by a chain no hand now holds. The old frontier believed suffering could sharpen a legend as cleanly as steel.",
+    choices: [
+      {
+        id: "pull-the-chain",
+        label: "Pull The Chain",
+        description: "Lose 10% max HP. Upgrade 2 random actions.",
+        effect: { loseHpPct: 0.1, upgradeRandomActions: 2 },
+      },
+      {
+        id: "take-the-flour",
+        label: "Take The Flour",
+        description: "Gain 1 Yellow Tonic, 1 Red Tonic, and 1 Red Herb.",
+        effect: { potions: { yellow: 1, red: 1 }, herbs: { red: 1 } },
+      },
+      {
+        id: "count-the-teeth",
+        label: "Count The Teeth",
+        description: "Gain 110 gold, but lose 8% max HP in the turning.",
+        effect: { gold: 110, loseHpPct: 0.08 },
+      },
+    ],
+  },
+  {
+    id: "ash-monastery",
+    title: "Ash Monastery",
+    text: "An ash-choked monastery keeps three teachings alive: study, discipline, and carrying the right fire into the next fight.",
+    choices: [
+      {
+        id: "copy-the-codex",
+        label: "Copy The Codex",
+        description: "Gain 1 skill point and sharpen your lowest HARD action by 1 level.",
+        effect: { skillPoints: 1, upgradeLowestHard: 1 },
+      },
+      {
+        id: "carry-the-censer",
+        label: "Carry The Censer",
+        description: "Gain Fury Censer for the next 2 battles and 1 Blue Herb.",
+        effect: { modifierId: "fury-censer", herbs: { blue: 1 } },
+      },
+      {
+        id: "take-the-vow",
+        label: "Take The Vow",
+        description: "Gain +2 VIT and +1 Focus.",
+        effect: { stats: { vit: 2, focus: 1 } },
+      },
+    ],
+  },
+  {
+    id: "reliquary-well",
+    title: "Reliquary Well",
+    text: "A chain descends into a reliquary well lined with saint bones and silver hooks. It will return either a blessing or the bill for one.",
+    choices: [
+      {
+        id: "lower-the-chain",
+        label: "Lower The Chain",
+        description: "Pay 80 gold and draw up a random relic.",
+        effect: { loseGold: 80, randomRelic: true },
+      },
+      {
+        id: "drink-the-cold",
+        label: "Drink The Cold",
+        description: "Gain Warding Echo for the next 2 battles.",
+        effect: { modifierId: "warding-echo" },
+      },
+      {
+        id: "draw-blackwater",
+        label: "Draw Blackwater",
+        description: "Lose 8% max HP. Gain 1 Blue Tonic, 1 Red Tonic, and 1 skill point.",
+        effect: { loseHpPct: 0.08, potions: { blue: 1, red: 1 }, skillPoints: 1 },
+      },
+    ],
+  },
+  {
+    id: "witch-lantern",
+    title: "Witch Lantern",
+    text: "A witch-lantern swings over black oil and copper bowls. Each flame offers short-lived power, and none of it comes clean.",
+    choices: [
+      {
+        id: "drink-the-storm-oil",
+        label: "Drink The Storm Oil",
+        description: "Lose 8% max HP. Gain Storm Battery for your next battle.",
+        effect: { loseHpPct: 0.08, modifierId: "storm-battery" },
+      },
+      {
+        id: "wear-the-fury-censer",
+        label: "Wear The Fury Censer",
+        description: "Lose 12% max HP. Gain Fury Censer for the next 2 battles.",
+        effect: { loseHpPct: 0.12, modifierId: "fury-censer" },
+      },
+      {
+        id: "take-the-warding-ash",
+        label: "Take The Warding Ash",
+        description: "Pay 70 gold. Gain Warding Echo for the next 2 battles.",
+        effect: { loseGold: 70, modifierId: "warding-echo" },
+      },
+    ],
+  },
+  {
     id: "sealed-vault",
     title: "Sealed Vault",
     text: "A pressure door grinds open just enough to tempt you. The Obelisk makes it clear: every prize here costs blood or coin.",
@@ -1916,6 +2661,106 @@ export const EVENT_TEMPLATES = [
         label: "Take The Ransom",
         description: "Claim blackmail coin, but lose 10% max HP escaping the bargain.",
         effect: { gold: 180, loseHpPct: 0.1 },
+      },
+    ],
+  },
+  {
+    id: "ember-tribunal",
+    title: "Ember Tribunal",
+    text: "Three ember judges sit in cracked stone and demand that you argue your right to keep climbing. Each verdict grants power, but none are kind.",
+    choices: [
+      {
+        id: "argue-force",
+        label: "Argue Force",
+        description: "Lose 8% max HP. Gain Fury Censer and 1 skill point.",
+        effect: { loseHpPct: 0.08, modifierId: "fury-censer", skillPoints: 1 },
+      },
+      {
+        id: "argue-cunning",
+        label: "Argue Cunning",
+        description: "Claim a random relic, then carry Glass Curse for the next 2 battles.",
+        effect: { randomRelic: true, modifierId: "glass-curse" },
+      },
+      {
+        id: "argue-mercy",
+        label: "Argue Mercy",
+        description: "Gain 1 Red Tonic, 1 Blue Tonic, and 90 gold.",
+        effect: { potions: { red: 1, blue: 1 }, gold: 90 },
+      },
+    ],
+  },
+  {
+    id: "moon-reliquary",
+    title: "Moon Reliquary",
+    text: "A moonlit reliquary keeps cold treasures behind silver mesh. It favors climbers willing to choose between greed, poise, and patient preparation.",
+    choices: [
+      {
+        id: "rob-the-moon",
+        label: "Rob The Moon",
+        description: "Lose 14% max HP and seize a random relic.",
+        effect: { loseHpPct: 0.14, randomRelic: true },
+      },
+      {
+        id: "leave-an-offering",
+        label: "Leave An Offering",
+        description: "Gain 1 skill point, 1 Yellow Tonic, and 1 Blue Tonic.",
+        effect: { skillPoints: 1, potions: { yellow: 1, blue: 1 } },
+      },
+      {
+        id: "steal-the-light",
+        label: "Steal The Light",
+        description: "Gain Storm Battery for the next battle and upgrade 1 random action.",
+        effect: { modifierId: "storm-battery", upgradeRandomActions: 1 },
+      },
+    ],
+  },
+  {
+    id: "gallows-ledger",
+    title: "Gallows Ledger",
+    text: "A condemned quartermaster left his accounts hanging from a gallows beam. Every line still balances, but only because someone always pays the hidden half.",
+    choices: [
+      {
+        id: "sign-in-black",
+        label: "Sign In Black",
+        description: "Gain 120 gold now and carry Crow Contract for the next 2 battles.",
+        effect: { gold: 120, modifierId: "crow-contract" },
+      },
+      {
+        id: "tear-the-page",
+        label: "Tear The Page",
+        description: "Lose 12% max HP. Gain 2 skill points.",
+        effect: { loseHpPct: 0.12, skillPoints: 2 },
+      },
+      {
+        id: "burn-the-ledger",
+        label: "Burn The Ledger",
+        description: "Gain Storm Battery and upgrade 1 random action.",
+        effect: { modifierId: "storm-battery", upgradeRandomActions: 1 },
+      },
+    ],
+  },
+  {
+    id: "fracture-dais",
+    title: "Fracture Dais",
+    text: "A cracked dais offers power that will not last. The Obelisk seems almost amused by how often that is enough.",
+    choices: [
+      {
+        id: "take-the-glass-edge",
+        label: "Take The Glass Edge",
+        description: "Claim a random relic and carry Glass Curse for the next 2 battles.",
+        effect: { randomRelic: true, modifierId: "glass-curse" },
+      },
+      {
+        id: "sign-the-crow-contract",
+        label: "Sign The Crow Contract",
+        description: "Gain 90 gold now and richer spoils for the next 2 battles.",
+        effect: { gold: 90, modifierId: "crow-contract" },
+      },
+      {
+        id: "bank-the-echo",
+        label: "Bank The Echo",
+        description: "Gain 1 skill point and Warding Echo for the next 2 battles.",
+        effect: { skillPoints: 1, modifierId: "warding-echo" },
       },
     ],
   },

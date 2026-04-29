@@ -9,6 +9,8 @@ import {
   BASE_UNLOCKS,
   BASE_ACTIONS,
   BASE_ULTIMATE_CHARGE_REQUIRED,
+  CLIMB_TIERS,
+  DEFAULT_TIER_ID,
   ENEMY_ARCHETYPES,
   EVENT_TEMPLATES,
   FLOOR_RULES,
@@ -22,6 +24,7 @@ import {
   QUICK_WINDOW_MS,
   RELICS,
   REST_TRAINING_FALLBACKS,
+  RUN_MODIFIERS,
   SCREEN,
   SKILL_TREES,
   SHOP_TEMPLATE,
@@ -29,6 +32,11 @@ import {
   TRAINING_REWARDS,
   ULTIMATES,
 } from "./data.js";
+import {
+  ACHIEVEMENT_DEFS,
+  evaluateAchievements,
+  getAchievementById,
+} from "./achievements.js";
 
 const MAX_COMBO = 12;
 const MAX_COMBO_ROGUE = 24;
@@ -47,6 +55,30 @@ export function getLegend(id) {
 
 export function getSpire(id) {
   return SPIRES.find((spire) => spire.id === id) || SPIRES[SPIRES.length - 1];
+}
+
+// Climb-tier helpers. Tier governs the academic baseline (number ranges,
+// timer pacing, allowed operations). Defaulting to the as-shipped "adept"
+// tier means saved profiles and runs without a tierId still tune identically.
+export function getClimbTier(id) {
+  return CLIMB_TIERS.find((tier) => tier.id === id) || CLIMB_TIERS.find((tier) => tier.id === DEFAULT_TIER_ID) || CLIMB_TIERS[0];
+}
+
+export function getRunTier(run) {
+  return getClimbTier(run?.tierId);
+}
+
+// Returns true if the given spire's required operation(s) are all permitted
+// at the given tier. The mixed spire is always allowed (it just shrinks its
+// operator pool to whatever the tier allows).
+export function isSpireAllowedAtTier(spireId, tierId) {
+  const tier = getClimbTier(tierId);
+  const allowed = new Set(tier.allowedOps || ["+", "-", "*", "/"]);
+  if (spireId === "addition") return allowed.has("+");
+  if (spireId === "subtraction") return allowed.has("-");
+  if (spireId === "multiplication") return allowed.has("*");
+  if (spireId === "division") return allowed.has("/");
+  return true; // mixed
 }
 
 export function getRelicById(id) {
@@ -73,6 +105,61 @@ function getTechniqueById(techniqueId) {
   return Object.values(ACTION_EVOLUTIONS)
     .flat()
     .find((technique) => technique.id === techniqueId) || null;
+}
+
+function getRunModifierById(modifierId) {
+  return RUN_MODIFIERS.find((modifier) => modifier.id === modifierId) || null;
+}
+
+function normalizeRunModifiers(modifiers = []) {
+  return (modifiers || [])
+    .map((modifier) => {
+      const base = getRunModifierById(modifier?.id);
+      if (!base) return null;
+      return {
+        id: base.id,
+        remainingBattles: Math.max(0, Number(modifier?.remainingBattles ?? base.battles ?? 0)),
+      };
+    })
+    .filter((modifier) => modifier && modifier.remainingBattles > 0);
+}
+
+function addRunModifier(player, modifierId) {
+  const modifier = getRunModifierById(modifierId);
+  if (!modifier) return null;
+  player.runModifiers = normalizeRunModifiers(player.runModifiers);
+  const existing = player.runModifiers.find((entry) => entry.id === modifier.id);
+  if (existing) {
+    existing.remainingBattles = Math.max(existing.remainingBattles, Math.max(1, Number(modifier.battles || 1)));
+  } else {
+    player.runModifiers.push({
+      id: modifier.id,
+      remainingBattles: Math.max(1, Number(modifier.battles || 1)),
+    });
+  }
+  return modifier;
+}
+
+function consumeRunModifiersAfterBattle(player) {
+  player.runModifiers = normalizeRunModifiers(player.runModifiers)
+    .map((modifier) => ({
+      ...modifier,
+      remainingBattles: Math.max(0, modifier.remainingBattles - 1),
+    }))
+    .filter((modifier) => modifier.remainingBattles > 0);
+}
+
+export function getRunModifierSummary(player) {
+  return normalizeRunModifiers(player?.runModifiers).map((modifier) => {
+    const base = getRunModifierById(modifier.id);
+    return {
+      id: modifier.id,
+      name: base?.name || modifier.id,
+      tone: base?.tone || "boon",
+      description: base?.description || "",
+      battlesLeft: modifier.remainingBattles,
+    };
+  });
 }
 
 function getSkillNodeById(legendId, nodeId) {
@@ -395,6 +482,7 @@ function getRunReportStars(report) {
 function buildRunReportFromState(run, player, runStats) {
   const accuracy = getRunAccuracyPct(runStats);
   const report = {
+    outcome: "victory",
     elapsedMs: Math.max(0, Number(run?.elapsedMs || 0)),
     accuracy,
     monstersKilled: Math.max(0, Number(runStats.monstersKilled || 0)),
@@ -407,6 +495,9 @@ function buildRunReportFromState(run, player, runStats) {
     damageDone: Math.max(0, Number(runStats.damageDone || 0)),
     legendId: player.legendId,
     spireId: run.spireId,
+    floorReached: Math.max(0, Number(player.floor || 0)),
+    relicsCarried: Array.isArray(player.relics) ? player.relics.length : 0,
+    materialsBanked: clone(run.metaRewards || {}),
   };
   report.stars = getRunReportStars(report);
   report.starReasons = [
@@ -415,6 +506,31 @@ function buildRunReportFromState(run, player, runStats) {
     report.elapsedMs <= (26 * 60 * 1000) ? "Speed Star Earned" : "Speed Star Missed",
   ];
   return report;
+}
+
+function buildDefeatReportFromState(run, player, runStats) {
+  const accuracy = getRunAccuracyPct(runStats);
+  const floorReached = Math.max(0, Number(player?.floor || 0));
+  return {
+    outcome: "defeat",
+    elapsedMs: Math.max(0, Number(run?.elapsedMs || 0)),
+    accuracy,
+    monstersKilled: Math.max(0, Number(runStats.monstersKilled || 0)),
+    battlesCleared: Math.max(0, Number(runStats.battlesCleared || 0)),
+    elitesCleared: Math.max(0, Number(runStats.elitesCleared || 0)),
+    bossesCleared: Math.max(0, Number(runStats.bossesCleared || 0)),
+    totalTurns: Math.max(0, Number(runStats.totalTurns || 0)),
+    totalHits: Math.max(0, Number(runStats.totalHits || 0)),
+    totalCrits: Math.max(0, Number(runStats.totalCrits || 0)),
+    damageDone: Math.max(0, Number(runStats.damageDone || 0)),
+    legendId: player.legendId,
+    spireId: run.spireId,
+    floorReached,
+    floorDisplay: floorReached + 1,
+    relicsCarried: Array.isArray(player?.relics) ? player.relics.length : 0,
+    materialsBanked: clone(run.metaRewards || {}),
+    falledIn: run.battle?.nodeType || null,
+  };
 }
 
 function normalizeMaterialStock(materials = {}, legacy = {}) {
@@ -675,6 +791,7 @@ export function createPlayerFromLegend(legendId) {
     skillPoints: 0,
     skillNodesUnlocked: [],
     techniquesUnlocked: [],
+    runModifiers: [],
     battleBuffs: [],
     herbs: createEmptyHerbStock(),
     potions: createEmptyPotionStock(),
@@ -747,19 +864,38 @@ export function getActForFloor(floor) {
   return Math.min(ACT_COUNT, Math.floor(floor / ACT_LENGTH) + 1);
 }
 
-export function getBattleTimeLimitForFloor(floor) {
-  return ACT_TIME_LIMITS[getActForFloor(floor) - 1];
+export function getBattleTimeLimitForFloor(floor, tierId = DEFAULT_TIER_ID) {
+  const base = ACT_TIME_LIMITS[getActForFloor(floor) - 1];
+  const tier = getClimbTier(tierId);
+  const multiplier = Number.isFinite(tier?.timerMultiplier) ? tier.timerMultiplier : 1;
+  // Early-run easing: the first few combats give the player extra time
+  // to settle into the math loop before the standard Act 1 pace kicks in.
+  // By floor 3 the baseline takes over.
+  const earlyEasing = floor === 0 ? 1.5
+    : floor === 1 ? 1.3
+    : floor === 2 ? 1.15
+    : 1;
+  return Math.max(2000, Math.round(base * multiplier * earlyEasing));
 }
 
 export function getBattleTimeLimit(run) {
-  return getBattleTimeLimitForFloor(run?.player?.floor || 0);
+  return getBattleTimeLimitForFloor(run?.player?.floor || 0, run?.tierId);
 }
 
-export function createRun(legendId, spireId = "mixed", profile = createEmptyProfile()) {
+export function getQuickWindowMs(run) {
+  const tier = getClimbTier(run?.tierId);
+  const multiplier = Number.isFinite(tier?.quickWindowMultiplier) ? tier.quickWindowMultiplier : 1;
+  return Math.max(500, Math.round(QUICK_WINDOW_MS * multiplier));
+}
+
+export function createRun(legendId, spireId = "mixed", profile = createEmptyProfile(), tierId = DEFAULT_TIER_ID) {
   const spire = getSpire(spireId);
-  return {
-    player: createPlayerFromLegend(legendId),
+  const tier = getClimbTier(tierId);
+  const player = createPlayerFromLegend(legendId);
+  const run = {
+    player,
     spireId: spire.id,
+    tierId: tier.id,
     contentState: buildRunContentState(profile),
     metaRewards: createEmptyMaterialStock(),
     elapsedMs: 0,
@@ -782,7 +918,99 @@ export function createRun(legendId, spireId = "mixed", profile = createEmptyProf
     treasureOffer: null,
     utilityReveal: null,
     log: [`The ${spire.name} opens.`],
+    consumedProblemTexts: [],
   };
+  run.problemBank = buildProblemBankForRun(run, profile);
+  return run;
+}
+
+// --- Question bank --------------------------------------------------------
+//
+// Each run carries a pre-generated stockpile of math problems split by
+// difficulty (EASY / HARD). createHand() consumes from the bank rather than
+// generating fresh on every draw, so within a run a child won't see the same
+// 7 x 8 prompt twice in a row.
+//
+// Across runs we also exclude the most-recent N problems per spire from a
+// new bank, where N defaults to 150. That stops back-to-back runs from
+// repeating their question set while keeping the smaller pools (e.g.
+// multiplication 2-12 has only 121 unique problems) from being permanently
+// exhausted.
+
+const PROBLEM_BANK_TARGET_PER_DIFFICULTY = 240;
+const PROBLEM_BANK_FLOOR_PER_DIFFICULTY = 90;
+const QUESTION_HISTORY_LIMIT_PER_SPIRE = 150;
+
+function buildProblemBankForRun(run, profile = null) {
+  const spireId = run.spireId;
+  const tierId = run.tierId || DEFAULT_TIER_ID;
+  // Question history is keyed per-spire AND per-tier so a Sage climb's
+  // huge prompts never starve a Sprout climb on the same spire.
+  const historyKey = `${spireId}:${tierId}`;
+  const recent = new Set((profile?.questionHistory?.[historyKey] || []).slice(-QUESTION_HISTORY_LIMIT_PER_SPIRE));
+  const bank = { EASY: [], HARD: [] };
+
+  for (const difficulty of ["EASY", "HARD"]) {
+    const seen = new Set();
+    let attempts = 0;
+    const maxAttempts = PROBLEM_BANK_TARGET_PER_DIFFICULTY * 6;
+    while (bank[difficulty].length < PROBLEM_BANK_TARGET_PER_DIFFICULTY && attempts < maxAttempts) {
+      attempts += 1;
+      const floor = Math.floor(Math.random() * MAP_HEIGHT);
+      const problem = generateProblem(difficulty, run.player, spireId, floor, tierId);
+      if (!problem || !problem.text) continue;
+      if (seen.has(problem.text)) continue;
+      if (recent.has(problem.text)) continue;
+      seen.add(problem.text);
+      bank[difficulty].push(problem);
+    }
+    // Floor: if the recent-history filter starved this difficulty, top up
+    // with permitted repeats. Better to recycle than to deplete the bank.
+    while (bank[difficulty].length < PROBLEM_BANK_FLOOR_PER_DIFFICULTY) {
+      const floor = Math.floor(Math.random() * MAP_HEIGHT);
+      const problem = generateProblem(difficulty, run.player, spireId, floor, tierId);
+      if (problem && problem.text) bank[difficulty].push(problem);
+    }
+  }
+  return bank;
+}
+
+function consumeProblemFromBank(run, difficulty, fallbackArgs) {
+  const bank = run?.problemBank;
+  const queue = bank?.[difficulty];
+  if (Array.isArray(queue) && queue.length) {
+    const problem = queue.shift();
+    if (problem) {
+      if (Array.isArray(run.consumedProblemTexts)) {
+        run.consumedProblemTexts.push(problem.text);
+      }
+      return problem;
+    }
+  }
+  // Bank exhausted (e.g. very long run) - fall back to live generation
+  // and still record the text for cross-run history.
+  const fresh = generateProblem(...fallbackArgs);
+  if (fresh && Array.isArray(run?.consumedProblemTexts)) {
+    run.consumedProblemTexts.push(fresh.text);
+  }
+  return fresh;
+}
+
+function appendQuestionHistory(profile, run) {
+  if (!profile || !run?.spireId) return profile;
+  const consumed = Array.isArray(run.consumedProblemTexts) ? run.consumedProblemTexts : [];
+  if (!consumed.length) return profile;
+  const next = clone(profile);
+  next.questionHistory = next.questionHistory || {};
+  // History key matches buildProblemBankForRun: per-spire AND per-tier so
+  // ranges that don't overlap can't starve each other on consecutive runs.
+  const historyKey = `${run.spireId}:${run.tierId || DEFAULT_TIER_ID}`;
+  const previous = Array.isArray(next.questionHistory[historyKey]) ? next.questionHistory[historyKey] : [];
+  const merged = [...previous, ...consumed];
+  // Keep only the most-recent QUESTION_HISTORY_LIMIT_PER_SPIRE entries so
+  // the profile blob doesn't grow without bound.
+  next.questionHistory[historyKey] = merged.slice(-QUESTION_HISTORY_LIMIT_PER_SPIRE);
+  return next;
 }
 
 export function hydrateRunState(run, profile = createEmptyProfile()) {
@@ -791,12 +1019,18 @@ export function hydrateRunState(run, profile = createEmptyProfile()) {
   if (!next.spireId) {
     next.spireId = "mixed";
   }
+  // Older saves predate the climb-tier feature; treat them as Adept (the
+  // tuning the run was originally generated against).
+  if (!CLIMB_TIERS.some((tier) => tier.id === next.tierId)) {
+    next.tierId = DEFAULT_TIER_ID;
+  }
 
   next.player.ultimateUnlocked = !!next.player.ultimateUnlocked;
   next.player.utilitySlotUnlocked = !!next.player.utilitySlotUnlocked;
   next.player.skillPoints = Math.max(0, Number(next.player.skillPoints || 0));
   next.player.skillNodesUnlocked = [...new Set(next.player.skillNodesUnlocked || [])];
   next.player.techniquesUnlocked = [...new Set(next.player.techniquesUnlocked || [])];
+  next.player.runModifiers = normalizeRunModifiers(next.player.runModifiers);
   normalizeBattleBuffs(next.player);
   next.player.herbs = normalizeHerbStock(next.player.herbs);
   next.player.potions = normalizePotionStock(next.player.potions);
@@ -828,6 +1062,14 @@ export function hydrateRunState(run, profile = createEmptyProfile()) {
   next.restOffer = next.restOffer || null;
   next.routePanel = next.routePanel || null;
   next.skillTreeOpen = !!next.skillTreeOpen;
+  next.consumedProblemTexts = Array.isArray(next.consumedProblemTexts)
+    ? next.consumedProblemTexts.slice()
+    : [];
+  // Pre-bank runs (saved from a prior version) get a fresh bank seeded with
+  // the profile's question history so resumes don't repeat the same prompts.
+  if (!next.problemBank || !Array.isArray(next.problemBank.EASY)) {
+    next.problemBank = buildProblemBankForRun(next, profile);
+  }
   next.shopOffer = (next.shopOffer || []).filter((offer) => offer?.actionId !== "heal");
   if (next.reward?.trainingChoices) {
     next.reward.trainingChoices = next.reward.trainingChoices.filter((choice) => choice?.actionId !== "heal");
@@ -896,6 +1138,17 @@ export function getRelicModifiers(player) {
     });
     return result;
   }, nodeMods);
+  const runModifierMods = normalizeRunModifiers(player.runModifiers).reduce((result, modifier) => {
+    const base = getRunModifierById(modifier.id);
+    Object.entries(base?.apply || {}).forEach(([key, value]) => {
+      if (typeof value === "number") {
+        result[key] = (result[key] || 0) + value;
+      } else {
+        result[key] = value;
+      }
+    });
+    return result;
+  }, buffMods);
   return player.relics.reduce((result, relic) => {
     Object.entries(relic.apply).forEach(([key, value]) => {
       if (typeof value === "number") {
@@ -905,7 +1158,7 @@ export function getRelicModifiers(player) {
       }
     });
     return result;
-  }, buffMods);
+  }, runModifierMods);
 }
 
 export function getEnergyMax(player, relicMods = getRelicModifiers(player)) {
@@ -967,6 +1220,11 @@ function getStrengthMultiplier(strength) {
 export function getActionCost(player, action, options = {}) {
   const relicMods = options.relicMods ?? getRelicModifiers(player);
   const turnActionsPlayed = options.turnActionsPlayed ?? 0;
+  // nextActionFree: a one-shot 0-cost action granted by recovery skills
+  // (Rogue Shadowcraft, Wizard Arcana). Always overrides the base cost.
+  if (player?.nextActionFree && action?.type !== "ULTIMATE") {
+    return 0;
+  }
   const baseCost = action.energyCost ?? 1;
   const discount = turnActionsPlayed === 0 ? Math.floor(relicMods.firstActionDiscount || 0) : 0;
   return Math.max(0, baseCost - discount);
@@ -1261,163 +1519,340 @@ function grantSpecificRelic(player, relicId) {
   return relic;
 }
 
+const EVENT_EFFECT_ORDER = [
+  "stats",
+  "maxHp",
+  "heal",
+  "healPct",
+  "loseHpPct",
+  "gold",
+  "loseGold",
+  "herbs",
+  "potions",
+  "skillPoints",
+  "upgradeLowestHard",
+  "upgradeRandomActions",
+  "upgradeActionId",
+  "randomRelic",
+  "relicId",
+  "modifierId",
+  "unlockUltimate",
+  "techniqueId",
+];
+
+const EVENT_EFFECT_HANDLERS = {
+  stats: {
+    apply({ player, value, notes }) {
+      Object.entries(value || {}).forEach(([stat, amount]) => {
+        increaseStat(player, stat, amount);
+        notes.push(`+${amount} ${stat.toUpperCase()}`);
+      });
+    },
+  },
+  maxHp: {
+    apply({ player, value, notes }) {
+      player.maxHp += value;
+      player.hp += value;
+      notes.push(`+${value} max HP`);
+    },
+  },
+  heal: {
+    apply({ player, value, notes }) {
+      player.hp = Math.min(player.maxHp, player.hp + value);
+      notes.push(`heal ${value}`);
+    },
+  },
+  healPct: {
+    apply({ player, value, notes }) {
+      const healAmount = Math.floor(player.maxHp * value);
+      player.hp = Math.min(player.maxHp, player.hp + healAmount);
+      notes.push(`heal ${healAmount}`);
+    },
+  },
+  loseHpPct: {
+    apply({ player, value, notes }) {
+      const hpLoss = Math.max(1, Math.floor(player.maxHp * value));
+      player.hp = Math.max(1, player.hp - hpLoss);
+      notes.push(`lose ${hpLoss} HP`);
+    },
+  },
+  gold: {
+    apply({ player, value, notes }) {
+      player.gold += value;
+      notes.push(`+${value} gold`);
+    },
+  },
+  loseGold: {
+    apply({ player, value, notes }) {
+      const goldLoss = Math.min(player.gold, value);
+      player.gold -= goldLoss;
+      notes.push(`lose ${goldLoss} gold`);
+    },
+    disabledReason({ player, value }) {
+      if (player.gold < value) return `Need ${value} gold`;
+      return "";
+    },
+  },
+  herbs: {
+    apply({ player, value, notes }) {
+      player.herbs = addHerbStock(player.herbs, value);
+      Object.entries(value || {}).forEach(([herbId, amount]) => {
+        if (amount > 0) notes.push(`+${amount} ${HERBS[herbId]?.name || herbId}`);
+      });
+    },
+  },
+  potions: {
+    apply({ player, value, notes }) {
+      const before = normalizePotionStock(player.potions);
+      const after = addPotionStock(before, value);
+      player.potions = after;
+      Object.entries(value || {}).forEach(([potionId]) => {
+        const granted = Math.max(0, Number(after?.[potionId] || 0) - Number(before?.[potionId] || 0));
+        if (granted > 0) notes.push(`+${granted} ${POTIONS[potionId]?.name || potionId}`);
+      });
+    },
+    disabledReason({ player, value }) {
+      const stock = normalizePotionStock(player.potions);
+      const wantsPotions = Object.entries(value || {}).filter(([, amount]) => Number(amount) > 0);
+      if (wantsPotions.length && wantsPotions.every(([potionId]) => Math.max(0, Number(stock?.[potionId] || 0)) >= 3)) {
+        return "Belt full";
+      }
+      return "";
+    },
+  },
+  skillPoints: {
+    apply({ player, value, notes }) {
+      const points = Math.max(0, Number(value || 0));
+      if (points > 0) {
+        player.skillPoints = Math.max(0, Number(player.skillPoints || 0) + points);
+        notes.push(`+${points} skill point${points === 1 ? "" : "s"}`);
+      }
+    },
+  },
+  upgradeLowestHard: {
+    apply({ player, value, notes }) {
+      const hardActions = player.actions.filter((action) => action.difficulty === "HARD" && action.id !== "util");
+      const target = hardActions.reduce((best, action) => (action.level < best.level ? action : best), hardActions[0] || player.actions[0]);
+      if (target) {
+        upgradeAction(target, value);
+        notes.push(`${target.name} upgraded`);
+      }
+    },
+  },
+  upgradeRandomActions: {
+    apply({ player, value, notes }) {
+      shuffle(player.actions.filter((action) => action.id !== "util")).slice(0, value).forEach((action) => {
+        upgradeAction(action, 1);
+        notes.push(`${action.name} upgraded`);
+      });
+    },
+  },
+  upgradeActionId: {
+    apply({ player, value, effect, notes }) {
+      const action = player.actions.find((entry) => entry.id === value);
+      if (action) {
+        const levels = effect.upgradeActionLevels || 1;
+        upgradeAction(action, levels);
+        notes.push(`${action.name} +${levels} level`);
+      }
+    },
+  },
+  randomRelic: {
+    apply({ player, relicPool, notes, gainedRelics }) {
+      const relic = grantRandomRelic(player, relicPool);
+      if (relic) {
+        notes.push(`${relic.name} gained`);
+        gainedRelics.push(relic);
+      }
+    },
+    disabledReason({ player, relicPool }) {
+      const ownedIds = new Set(player.relics.map((relic) => relic.id));
+      if (relicPool.every((relic) => ownedIds.has(relic.id))) {
+        return "Relic pool exhausted";
+      }
+      return "";
+    },
+  },
+  relicId: {
+    apply({ player, value, notes, gainedRelics }) {
+      const relic = grantSpecificRelic(player, value);
+      if (relic) {
+        notes.push(`${relic.name} gained`);
+        gainedRelics.push(relic);
+      }
+    },
+    disabledReason({ player, value, relicPool }) {
+      if (!relicPool.some((relic) => relic.id === value)) return "Requires Relic Forge unlock";
+      if (player.relics.some((relic) => relic.id === value)) return "Already owned";
+      return "";
+    },
+  },
+  modifierId: {
+    apply({ player, value, notes }) {
+      const modifier = addRunModifier(player, value);
+      if (modifier) {
+        notes.push(`${modifier.name} for ${modifier.battles} battle${modifier.battles === 1 ? "" : "s"}`);
+      }
+    },
+  },
+  unlockUltimate: {
+    apply({ player, value, notes }) {
+      if (value && !player.ultimateUnlocked) {
+        player.ultimateUnlocked = true;
+        notes.push(`${getUltimateConfig(player.legendId).name} awakened`);
+      }
+    },
+    disabledReason({ player, value }) {
+      if (value && player.ultimateUnlocked) return "Already awakened";
+      return "";
+    },
+  },
+  techniqueId: {
+    apply({ player, value, notes }) {
+      const technique = applyTechniqueToPlayer(player, value);
+      if (technique) {
+        notes.push(`${technique.unlockTitle} learned`);
+      }
+    },
+    disabledReason({ player, value }) {
+      if ((player.techniquesUnlocked || []).includes(value)) return "Already learned";
+      return "";
+    },
+  },
+};
+
+function getEventEffectKeys(effect = {}) {
+  return [
+    ...EVENT_EFFECT_ORDER.filter((key) => Object.prototype.hasOwnProperty.call(effect, key)),
+    ...Object.keys(effect).filter((key) => !EVENT_EFFECT_ORDER.includes(key)),
+  ];
+}
+
 function applyStructuredEffect(player, effect = {}, options = {}) {
   const notes = [];
   const gainedRelics = [];
   const relicPool = options.relicPool || RELICS;
-
-  if (effect.stats) {
-    Object.entries(effect.stats).forEach(([stat, amount]) => {
-      increaseStat(player, stat, amount);
-      notes.push(`+${amount} ${stat.toUpperCase()}`);
+  getEventEffectKeys(effect).forEach((key) => {
+    EVENT_EFFECT_HANDLERS[key]?.apply?.({
+      player,
+      value: effect[key],
+      effect,
+      notes,
+      gainedRelics,
+      relicPool,
+      options,
     });
-  }
-
-  if (effect.maxHp) {
-    player.maxHp += effect.maxHp;
-    player.hp += effect.maxHp;
-    notes.push(`+${effect.maxHp} max HP`);
-  }
-
-  if (effect.heal) {
-    player.hp = Math.min(player.maxHp, player.hp + effect.heal);
-    notes.push(`heal ${effect.heal}`);
-  }
-
-  if (effect.healPct) {
-    const healAmount = Math.floor(player.maxHp * effect.healPct);
-    player.hp = Math.min(player.maxHp, player.hp + healAmount);
-    notes.push(`heal ${healAmount}`);
-  }
-
-  if (effect.loseHpPct) {
-    const hpLoss = Math.max(1, Math.floor(player.maxHp * effect.loseHpPct));
-    player.hp = Math.max(1, player.hp - hpLoss);
-    notes.push(`lose ${hpLoss} HP`);
-  }
-
-  if (effect.gold) {
-    player.gold += effect.gold;
-    notes.push(`+${effect.gold} gold`);
-  }
-
-  if (effect.loseGold) {
-    const goldLoss = Math.min(player.gold, effect.loseGold);
-    player.gold -= goldLoss;
-    notes.push(`lose ${goldLoss} gold`);
-  }
-
-  if (effect.herbs) {
-    player.herbs = addHerbStock(player.herbs, effect.herbs);
-    Object.entries(effect.herbs).forEach(([herbId, amount]) => {
-      if (amount > 0) notes.push(`+${amount} ${HERBS[herbId]?.name || herbId}`);
-    });
-  }
-
-  if (effect.potions) {
-    const before = normalizePotionStock(player.potions);
-    const after = addPotionStock(before, effect.potions);
-    player.potions = after;
-    Object.entries(effect.potions).forEach(([potionId]) => {
-      const granted = Math.max(0, Number(after?.[potionId] || 0) - Number(before?.[potionId] || 0));
-      if (granted > 0) notes.push(`+${granted} ${POTIONS[potionId]?.name || potionId}`);
-    });
-  }
-
-  if (effect.skillPoints) {
-    const points = Math.max(0, Number(effect.skillPoints || 0));
-    if (points > 0) {
-      player.skillPoints = Math.max(0, Number(player.skillPoints || 0) + points);
-      notes.push(`+${points} skill point${points === 1 ? "" : "s"}`);
-    }
-  }
-
-  if (effect.upgradeLowestHard) {
-    const hardActions = player.actions.filter((action) => action.difficulty === "HARD" && action.id !== "util");
-    const target = hardActions.reduce((best, action) => (action.level < best.level ? action : best), hardActions[0] || player.actions[0]);
-    if (target) {
-      upgradeAction(target, effect.upgradeLowestHard);
-      notes.push(`${target.name} upgraded`);
-    }
-  }
-
-  if (effect.upgradeRandomActions) {
-    shuffle(player.actions.filter((action) => action.id !== "util")).slice(0, effect.upgradeRandomActions).forEach((action) => {
-      upgradeAction(action, 1);
-      notes.push(`${action.name} upgraded`);
-    });
-  }
-
-  if (effect.upgradeActionId) {
-    const action = player.actions.find((entry) => entry.id === effect.upgradeActionId);
-    if (action) {
-      upgradeAction(action, effect.upgradeActionLevels || 1);
-      notes.push(`${action.name} +${effect.upgradeActionLevels || 1} level`);
-    }
-  }
-
-  if (effect.randomRelic) {
-    const relic = grantRandomRelic(player, relicPool);
-    if (relic) {
-      notes.push(`${relic.name} gained`);
-      gainedRelics.push(relic);
-    }
-  }
-
-  if (effect.relicId) {
-    const relic = grantSpecificRelic(player, effect.relicId);
-    if (relic) {
-      notes.push(`${relic.name} gained`);
-      gainedRelics.push(relic);
-    }
-  }
-
-  if (effect.unlockUltimate && !player.ultimateUnlocked) {
-    player.ultimateUnlocked = true;
-    notes.push(`${getUltimateConfig(player.legendId).name} awakened`);
-  }
-
-  if (effect.techniqueId) {
-    const technique = applyTechniqueToPlayer(player, effect.techniqueId);
-    if (technique) {
-      notes.push(`${technique.unlockTitle} learned`);
-    }
-  }
+  });
 
   return { notes, gainedRelics };
 }
 
 function getChoiceDisabledReason(player, choice, relicPool = RELICS) {
   const effect = choice.effect || {};
-  if (effect.loseGold && player.gold < effect.loseGold) {
-    return `Need ${effect.loseGold} gold`;
-  }
-  if (effect.unlockUltimate && player.ultimateUnlocked) {
-    return "Already awakened";
-  }
-  if (effect.techniqueId && (player.techniquesUnlocked || []).includes(effect.techniqueId)) {
-    return "Already learned";
-  }
-  if (effect.relicId && !relicPool.some((relic) => relic.id === effect.relicId)) {
-    return "Requires Relic Forge unlock";
-  }
-  if (effect.relicId && player.relics.some((relic) => relic.id === effect.relicId)) {
-    return "Already owned";
-  }
-  if (effect.potions) {
-    const stock = normalizePotionStock(player.potions);
-    const wantsPotions = Object.entries(effect.potions).filter(([, amount]) => Number(amount) > 0);
-    if (wantsPotions.length && wantsPotions.every(([potionId]) => Math.max(0, Number(stock?.[potionId] || 0)) >= 3)) {
-      return "Belt full";
-    }
-  }
-  if (effect.randomRelic) {
-    const ownedIds = new Set(player.relics.map((relic) => relic.id));
-    if (relicPool.every((relic) => ownedIds.has(relic.id))) {
-      return "Relic pool exhausted";
+  for (const key of getEventEffectKeys(effect)) {
+    const reason = EVENT_EFFECT_HANDLERS[key]?.disabledReason?.({
+      player,
+      value: effect[key],
+      effect,
+      relicPool,
+    });
+    if (reason) {
+      return reason;
     }
   }
   return "";
+}
+
+function replaceEventChoice(template, choiceId, transform) {
+  template.choices = template.choices.map((choice) => choice.id === choiceId ? transform(choice) : choice);
+  return template;
+}
+
+const EVENT_TEMPLATE_TRANSFORMS = {
+  "blood-merchant": ({ template, player }) => replaceEventChoice(template, "take-gold", (choice) => ({
+    ...choice,
+    description: `Pocket ${140 + (player.floor * 12)} gold and walk away untouched.`,
+    effect: { gold: 140 + (player.floor * 12) },
+  })),
+  "shattered-dynamo": ({ template, player }) => replaceEventChoice(template, "rupture-shell", (choice) => ({
+    ...choice,
+    description: `Rip out ${170 + (player.floor * 10)} gold, but lose 10% max HP in the blast.`,
+    effect: { gold: 170 + (player.floor * 10), loseHpPct: 0.1 },
+  })),
+  "sealed-vault": ({ template, player }) => replaceEventChoice(template, "take-the-coin", (choice) => ({
+    ...choice,
+    description: `Escape with ${220 + (player.floor * 14)} gold, but lose 8% max HP in the scramble.`,
+    effect: { gold: 220 + (player.floor * 14), loseHpPct: 0.08 },
+  })),
+  "tally-of-crows": ({ template, player }) => replaceEventChoice(template, "take-the-ransom", (choice) => ({
+    ...choice,
+    description: `Claim ${180 + (player.floor * 10)} gold, but lose 10% max HP escaping the bargain.`,
+    effect: { gold: 180 + (player.floor * 10), loseHpPct: 0.1 },
+  })),
+  "black-banner": ({ template, player }) => {
+    const riteTechniqueByLegend = {
+      knight: "knight-marshals-oath",
+      wizard: "wizard-overchannel",
+      rogue: "rogue-cull-of-the-night",
+    };
+    const favoredActionByLegend = {
+      knight: "blk",
+      wizard: "aoe",
+      rogue: "atk",
+    };
+    const favoredAction = player.actions.find((action) => action.id === favoredActionByLegend[player.legendId]) || player.actions[0];
+    const riteTechnique = getTechniqueById(riteTechniqueByLegend[player.legendId]);
+    const alreadyKnowsRite = riteTechnique && (player.techniquesUnlocked || []).includes(riteTechnique.id);
+    template.text = player.legendId === "knight"
+      ? "A black war-banner waits in perfect stillness. Old marshal-oaths rise from the cloth, asking what kind of shield the frontier now needs."
+      : player.legendId === "wizard"
+        ? "A black ritual banner hangs over a cold brazier. Its sigils answer the air like unfinished equations waiting for a dangerous mind."
+        : "A black banner stitched with knife-quiet prayers sways without wind. It offers a killer's rite to anyone bold enough to take it.";
+    replaceEventChoice(template, "take-the-rite", (choice) => {
+      if (riteTechnique && !alreadyKnowsRite) {
+        return {
+          ...choice,
+          label: `Claim ${riteTechnique.name}`,
+          description: `Learn ${riteTechnique.name} immediately and open your utility slot with a stronger class art.`,
+          effect: { techniqueId: riteTechnique.id },
+        };
+      }
+      return {
+        ...choice,
+        label: "Study The Banner",
+        description: "You already bear this rite. Gain 1 skill point and 1 Blue Herb instead.",
+        effect: { skillPoints: 1, herbs: { blue: 1 } },
+      };
+    });
+    replaceEventChoice(template, "wake-the-seal", (choice) => {
+      if (!player.ultimateUnlocked) {
+        return {
+          ...choice,
+          label: `Awaken ${getUltimateConfig(player.legendId).name}`,
+          description: `Wake ${getUltimateConfig(player.legendId).name} for the rest of this climb.`,
+          effect: { unlockUltimate: true },
+        };
+      }
+      return {
+        ...choice,
+        label: "Feed The Banner Flame",
+        description: "Your ultimate is already awake. Gain 1 skill point and +1 Focus.",
+        effect: { skillPoints: 1, stats: { focus: 1 } },
+      };
+    });
+    replaceEventChoice(template, "carve-doctrine", (choice) => ({
+      ...choice,
+      label: "Carve A Doctrine",
+      description: `Gain 1 skill point and upgrade ${favoredAction?.name || "your signature art"} by 1 level.`,
+      effect: { skillPoints: 1, upgradeActionId: favoredAction?.id || "atk", upgradeActionLevels: 1 },
+    }));
+    return template;
+  },
+};
+
+function applyEventTemplateTransform(run, template, relicPool) {
+  const transform = EVENT_TEMPLATE_TRANSFORMS[template.id];
+  return transform ? transform({ template, player: run.player, run, relicPool }) : template;
 }
 
 function decorateEventChoices(player, template, relicPool = RELICS) {
@@ -1483,10 +1918,18 @@ export function getActionPreview(player, action, options = {}) {
   const elapsed = options.elapsed ?? 1000;
   const relicMods = options.relicMods ?? getRelicModifiers(player);
   const turnActionsPlayed = options.turnActionsPlayed ?? 0;
+  const quickWindow = Number.isFinite(options.quickWindowMs) ? options.quickWindowMs : QUICK_WINDOW_MS;
+  // speedFactor still uses a 4s baseline; tiers stretch the crit-window
+  // boundary but not the overall speed-curve shape.
   const speedFactor = Math.max(0, 1 - (elapsed / 4000));
-  const quick = elapsed <= QUICK_WINDOW_MS;
+  const quick = elapsed <= quickWindow;
   const bonusCritChance = action.bonusCritChance || 0;
-  const critChance = clampPercent((player.stats.focus * 1.5) + (speedFactor * 70) + (quick ? (relicMods.quickCritChance || 0) : 0) + bonusCritChance);
+  // critOnLowHpEnemy: extra crit chance points when a target enemy has been
+  // pushed below 35% HP. Knight execution lane uses this for a finisher feel.
+  const lowHpCritBonus = (relicMods.critOnLowHpEnemy && options.targetEnemyHpPct !== undefined && options.targetEnemyHpPct <= 0.35)
+    ? relicMods.critOnLowHpEnemy
+    : 0;
+  const critChance = clampPercent((player.stats.focus * 1.5) + (speedFactor * 70) + (quick ? (relicMods.quickCritChance || 0) : 0) + bonusCritChance + lowHpCritBonus);
   const critMultiplier = 1.5 + (player.stats.focus * 0.05) + (relicMods.critPowerBonus || 0) + (relicMods.focusCritBoost || 0);
   const strMult = getStrengthMultiplier(player.stats.str);
   const hardBoost = action.difficulty === "HARD" ? (relicMods.hardActionPower || 0) : 0;
@@ -1560,7 +2003,7 @@ export function getActionPreview(player, action, options = {}) {
   };
 }
 
-export function getPlayerMechanicSummary(player) {
+export function getPlayerMechanicSummary(player, run = null) {
   const relicMods = getRelicModifiers(player);
   return {
     strPowerPct: Math.round((getStrengthMultiplier(player.stats.str) - 1) * 100),
@@ -1568,7 +2011,7 @@ export function getPlayerMechanicSummary(player) {
     focusCritChancePct: Number((player.stats.focus * 1.5).toFixed(1)),
     focusCritPowerPct: Math.round(player.stats.focus * 5),
     quickCritChancePct: 70,
-    quickWindowMs: QUICK_WINDOW_MS,
+    quickWindowMs: run ? getQuickWindowMs(run) : QUICK_WINDOW_MS,
     energyPerTurn: getEnergyMax(player, relicMods),
     firstActionDiscount: Math.floor(relicMods.firstActionDiscount || 0),
     ultimateThreshold: getUltimateThreshold(player, relicMods),
@@ -1581,17 +2024,6 @@ function formatAmountText(action, amount) {
   if (action.type === "AOE") return `${amount} AOE`;
   return `${amount} damage`;
 }
-
-export function describeActionPreview(player, action) {
-  const preview = getActionPreview(player, action);
-  const normal = formatAmountText(action, preview.normalAmount);
-  const crit = formatAmountText(action, preview.critAmount);
-    const extraBlock = preview.bonusBlockOnCorrect ? ` | +${preview.bonusBlockOnCorrect} bonus block on hit` : "";
-    return {
-      preview,
-      label: `Est. ${normal} | Crit ${crit} | ${preview.critChance.toFixed(0)}% quick crit${extraBlock}`,
-    };
-  }
 
 export function describeActionPreviewClean(player, action) {
   const preview = getActionPreview(player, action);
@@ -1688,75 +2120,86 @@ function getShopOfferLabel(player, offer) {
   return offer.label || offer.relic?.name || "Run upgrade";
 }
 
-function getSpireOperators(spireId, act) {
-  if (spireId === "addition") return ["+"];
-  if (spireId === "subtraction") return ["-"];
-  if (spireId === "multiplication") return ["*"];
-  if (spireId === "division") return ["/"];
-  if (act === 1) return ["+", "-"];
-  if (act === 2) return ["+", "-", "*"];
-  return ["+", "-", "*", "/"];
+function getSpireOperators(spireId, act, tierId = DEFAULT_TIER_ID) {
+  const tier = getClimbTier(tierId);
+  const tierAllows = new Set(tier.allowedOps || ["+", "-", "*", "/"]);
+
+  // Single-operation spires: only return their op if the tier permits it.
+  // (UI prevents picking an excluded spire, but defend the engine anyway.)
+  if (spireId === "addition") return tierAllows.has("+") ? ["+"] : ["+"];
+  if (spireId === "subtraction") return tierAllows.has("-") ? ["-"] : ["+"];
+  if (spireId === "multiplication") return tierAllows.has("*") ? ["*"] : ["+"];
+  if (spireId === "division") return tierAllows.has("/") ? ["/"] : ["+"];
+
+  // Mixed spire: build the act-gated pool, then intersect with tier-allowed
+  // ops. If the intersection is empty (e.g. Sprout in Act 3), fall back to "+".
+  const actPool = act === 1 ? ["+", "-"] : act === 2 ? ["+", "-", "*"] : ["+", "-", "*", "/"];
+  const allowed = actPool.filter((op) => tierAllows.has(op));
+  return allowed.length ? allowed : ["+"];
 }
 
-function buildOperandsForOperation(op, act, difficulty, legendId) {
+function buildOperandsForOperation(op, act, difficulty, legendId, tierId = DEFAULT_TIER_ID) {
+  const tier = getClimbTier(tierId);
   const hard = difficulty === "HARD";
   const wizardBias = legendId === "wizard" && hard ? 1 : 0;
+  const tierRange = tier.ranges?.[op]?.[act];
 
   if (op === "+") {
-    const low = act === 1 ? 2 : act === 2 ? 8 : 14;
-    const high = act === 1 ? 12 : act === 2 ? 26 : 40;
-    const spread = hard ? 6 : 0;
+    // Tier range may be missing if a tier disallows the op but a stale
+    // problem-bank entry asks for it. Fall back to the Adept defaults.
+    const cfg = tierRange || { lo: 2, hi: 12, hardSpread: 6 };
+    const spread = hard ? (cfg.hardSpread || 0) : 0;
     return {
-      left: randomInt(low + wizardBias, high + spread + wizardBias),
-      right: randomInt(low, high + spread),
+      left: randomInt(cfg.lo + wizardBias, cfg.hi + spread + wizardBias),
+      right: randomInt(cfg.lo, cfg.hi + spread),
     };
   }
 
   if (op === "-") {
-    const low = act === 1 ? 3 : act === 2 ? 10 : 18;
-    const high = act === 1 ? 14 : act === 2 ? 28 : 42;
-    const spread = hard ? 6 : 0;
-    const a = randomInt(low + wizardBias, high + spread + wizardBias);
-    const b = randomInt(low, high + spread);
+    const cfg = tierRange || { lo: 3, hi: 14, hardSpread: 6 };
+    const spread = hard ? (cfg.hardSpread || 0) : 0;
+    const a = randomInt(cfg.lo + wizardBias, cfg.hi + spread + wizardBias);
+    const b = randomInt(cfg.lo, cfg.hi + spread);
     return { left: Math.max(a, b), right: Math.min(a, b) };
   }
 
   if (op === "*") {
-    const rangeByAct = [
-      { aMin: 2, aMax: 6, bMin: 2, bMax: 6 },
-      { aMin: 3, aMax: 9, bMin: 3, bMax: 9 },
-      { aMin: 4, aMax: 12, bMin: 4, bMax: 12 },
-    ][act - 1];
-    const bump = hard ? 2 : 0;
+    const cfg = tierRange || { aMin: 2, aMax: 6, bMin: 2, bMax: 6, hardBump: 2 };
+    const bump = hard ? (cfg.hardBump || 0) : 0;
     return {
-      left: randomInt(rangeByAct.aMin, rangeByAct.aMax + bump + wizardBias),
-      right: randomInt(rangeByAct.bMin, rangeByAct.bMax + bump),
+      left: randomInt(cfg.aMin, cfg.aMax + bump + wizardBias),
+      right: randomInt(cfg.bMin, cfg.bMax + bump),
     };
   }
 
-  const divisionByAct = [
-    { divisorMin: 2, divisorMax: 5, quotientMin: 2, quotientMax: 8 },
-    { divisorMin: 3, divisorMax: 8, quotientMin: 3, quotientMax: 10 },
-    { divisorMin: 4, divisorMax: 10, quotientMin: 4, quotientMax: 12 },
-  ][act - 1];
-  const bump = hard ? 2 : 0;
-  const divisor = randomInt(divisionByAct.divisorMin, divisionByAct.divisorMax + bump);
-  const quotient = randomInt(divisionByAct.quotientMin, divisionByAct.quotientMax + bump + wizardBias);
+  // Division: integer quotient only — divisor * quotient, then divide.
+  const cfg = tierRange || { divisorMin: 2, divisorMax: 5, quotientMin: 2, quotientMax: 8, hardBump: 2 };
+  const bump = hard ? (cfg.hardBump || 0) : 0;
+  const divisor = randomInt(cfg.divisorMin, cfg.divisorMax + bump);
+  const quotient = randomInt(cfg.quotientMin, cfg.quotientMax + bump + wizardBias);
   return { left: divisor * quotient, right: divisor };
 }
 
-export function generateProblem(difficulty, player, spireId = "mixed", floor = 0) {
+export function generateProblem(difficulty, player, spireId = "mixed", floor = 0, tierId = DEFAULT_TIER_ID) {
+  const tier = getClimbTier(tierId);
   const act = getActForFloor(floor);
-  const operators = getSpireOperators(spireId, act);
+  const operators = getSpireOperators(spireId, act, tier.id);
   const op = sample(operators);
-  const { left, right } = buildOperandsForOperation(op, act, difficulty, player.legendId);
+  const { left, right } = buildOperandsForOperation(op, act, difficulty, player.legendId, tier.id);
   const answer = op === "+" ? left + right : op === "-" ? left - right : op === "*" ? left * right : Math.floor(left / right);
+  // Distractors are scaled by tier so big numbers get readable spreads (a
+  // ±6 spread around 625 collapses into visually-identical options). The
+  // base offset list stays the same; tiers below Scholar use scale=1.
+  const distractorScale = Math.max(1, Number(tier.distractorScale) || 1);
+  const baseOffsets = [-6, -5, -4, -3, -2, 1, 2, 3, 4, 5, 6];
   const variants = new Set([answer]);
-  const offsets = shuffle([-6, -5, -4, -3, -2, 1, 2, 3, 4, 5, 6]);
+  const offsets = shuffle(baseOffsets.map((offset) => offset * distractorScale));
   for (const offset of offsets) {
     variants.add(Math.max(1, answer + offset));
     if (variants.size >= 4) break;
   }
+  // If all offsets collided (small answer + big scale), top up with adjacent
+  // integers. Always lands on 4 unique options.
   let fallbackStep = 1;
   while (variants.size < 4) {
     variants.add(answer + fallbackStep);
@@ -1771,16 +2214,18 @@ export function generateProblem(difficulty, player, spireId = "mixed", floor = 0
     operator: op,
     act,
     spireId,
+    tierId: tier.id,
   };
 }
 
 export function createHand(run, playerOverride = null, battleOverride = null) {
   const player = playerOverride || run.player;
+  const tierId = run.tierId || DEFAULT_TIER_ID;
   const baseHand = player.actions
     .filter((action) => !action.requiresUnlock || player[action.requiresUnlock])
     .map((action) => ({
     ...action,
-    problem: generateProblem(action.difficulty, player, run.spireId, player.floor),
+    problem: consumeProblemFromBank(run, action.difficulty, [action.difficulty, player, run.spireId, player.floor, tierId]),
   }));
   const ultimateAction = buildUltimateAction(run, player, battleOverride);
   if (!ultimateAction) return baseHand;
@@ -1788,7 +2233,7 @@ export function createHand(run, playerOverride = null, battleOverride = null) {
     ...baseHand,
     {
       ...ultimateAction,
-      problem: generateProblem(ultimateAction.difficulty, player, run.spireId, player.floor),
+      problem: consumeProblemFromBank(run, ultimateAction.difficulty, [ultimateAction.difficulty, player, run.spireId, player.floor, tierId]),
     },
   ];
 }
@@ -1827,6 +2272,7 @@ export function startBattle(run, node) {
   const player = clone(run.player);
   const legend = getLegend(player.legendId);
   player.battleBuffs = [];
+  player.nextActionFree = false;
   const relicMods = getRelicModifiers(player);
   player.block = (legend.startingBlock || 0) + Math.max(0, Math.floor(relicMods.battleStartBlock || 0));
   player.combo = Math.max(player.combo || 0, Math.floor(relicMods.battleStartCombo || 0));
@@ -1954,107 +2400,9 @@ export function buildTreasureOffer(run) {
 export function buildEventOffer(run) {
   const player = run.player;
   const eventPool = getEventPoolFromIds(getRunContentState(run).eventIds);
-  const template = clone(sample(eventPool.length ? eventPool : EVENT_TEMPLATES));
+  let template = clone(sample(eventPool.length ? eventPool : EVENT_TEMPLATES));
   const relicPool = getRelicPoolFromIds(getRunContentState(run).relicIds);
-  if (template.id === "black-banner") {
-    const riteTechniqueByLegend = {
-      knight: "knight-marshals-oath",
-      wizard: "wizard-overchannel",
-      rogue: "rogue-cull-of-the-night",
-    };
-    const favoredActionByLegend = {
-      knight: "blk",
-      wizard: "aoe",
-      rogue: "atk",
-    };
-    const favoredAction = player.actions.find((action) => action.id === favoredActionByLegend[player.legendId]) || player.actions[0];
-    const riteTechnique = getTechniqueById(riteTechniqueByLegend[player.legendId]);
-    const alreadyKnowsRite = riteTechnique && (player.techniquesUnlocked || []).includes(riteTechnique.id);
-    template.text = player.legendId === "knight"
-      ? "A black war-banner waits in perfect stillness. Old marshal-oaths rise from the cloth, asking what kind of shield the frontier now needs."
-      : player.legendId === "wizard"
-        ? "A black ritual banner hangs over a cold brazier. Its sigils answer the air like unfinished equations waiting for a dangerous mind."
-        : "A black banner stitched with knife-quiet prayers sways without wind. It offers a killer's rite to anyone bold enough to take it.";
-    template.choices = template.choices.map((choice) => {
-      if (choice.id === "take-the-rite") {
-        if (riteTechnique && !alreadyKnowsRite) {
-          return {
-            ...choice,
-            label: `Claim ${riteTechnique.name}`,
-            description: `Learn ${riteTechnique.name} immediately and open your utility slot with a stronger class art.`,
-            effect: { techniqueId: riteTechnique.id },
-          };
-        }
-        return {
-          ...choice,
-          label: "Study The Banner",
-          description: "You already bear this rite. Gain 1 skill point and 1 Blue Herb instead.",
-          effect: { skillPoints: 1, herbs: { blue: 1 } },
-        };
-      }
-      if (choice.id === "wake-the-seal") {
-        if (!player.ultimateUnlocked) {
-          return {
-            ...choice,
-            label: `Awaken ${getUltimateConfig(player.legendId).name}`,
-            description: `Wake ${getUltimateConfig(player.legendId).name} for the rest of this climb.`,
-            effect: { unlockUltimate: true },
-          };
-        }
-        return {
-          ...choice,
-          label: "Feed The Banner Flame",
-          description: "Your ultimate is already awake. Gain 1 skill point and +1 Focus.",
-          effect: { skillPoints: 1, stats: { focus: 1 } },
-        };
-      }
-      if (choice.id === "carve-doctrine") {
-        return {
-          ...choice,
-          label: "Carve A Doctrine",
-          description: `Gain 1 skill point and upgrade ${favoredAction?.name || "your signature art"} by 1 level.`,
-          effect: { skillPoints: 1, upgradeActionId: favoredAction?.id || "atk", upgradeActionLevels: 1 },
-        };
-      }
-      return choice;
-    });
-  }
-  if (template.id === "blood-merchant") {
-    template.choices = template.choices.map((choice) => choice.id === "take-gold"
-      ? {
-          ...choice,
-          description: `Pocket ${140 + (player.floor * 12)} gold and walk away untouched.`,
-          effect: { gold: 140 + (player.floor * 12) },
-        }
-      : choice);
-  }
-  if (template.id === "tally-of-crows") {
-    template.choices = template.choices.map((choice) => choice.id === "take-the-ransom"
-      ? {
-          ...choice,
-          description: `Claim ${180 + (player.floor * 10)} gold, but lose 10% max HP escaping the bargain.`,
-          effect: { gold: 180 + (player.floor * 10), loseHpPct: 0.1 },
-        }
-      : choice);
-  }
-  if (template.id === "shattered-dynamo") {
-    template.choices = template.choices.map((choice) => choice.id === "rupture-shell"
-      ? {
-          ...choice,
-          description: `Rip out ${170 + (player.floor * 10)} gold, but lose 10% max HP in the blast.`,
-          effect: { gold: 170 + (player.floor * 10), loseHpPct: 0.1 },
-        }
-      : choice);
-  }
-  if (template.id === "sealed-vault") {
-    template.choices = template.choices.map((choice) => choice.id === "take-the-coin"
-      ? {
-          ...choice,
-          description: `Escape with ${220 + (player.floor * 14)} gold, but lose 8% max HP in the scramble.`,
-          effect: { gold: 220 + (player.floor * 14), loseHpPct: 0.08 },
-        }
-      : choice);
-  }
+  template = applyEventTemplateTransform(run, template, relicPool);
   return decorateEventChoices(player, template, relicPool);
 }
 
@@ -2228,11 +2576,15 @@ function resolveEnemyTurn(run, player, battle, logMessage, inheritedPopups = [])
   finalBattle.hand = createHand(run, finalPlayer, finalBattle);
 
   if (finalPlayer.hp <= 0) {
+    const runStatsAfter = addBattleToRunStats(run.runStats, finalBattle);
+    const defeatReport = buildDefeatReportFromState(run, finalPlayer, runStatsAfter);
     return {
       ...run,
       screen: "GAMEOVER",
       player: finalPlayer,
       battle: finalBattle,
+      runStats: runStatsAfter,
+      runReport: defeatReport,
       log: [...run.log, "The Obelisk overwhelms the legend."],
     };
   }
@@ -2454,6 +2806,36 @@ function resolveTurnFromOutcome(run, player, nextBattle, action, outcome) {
       });
     }
 
+    // comboHealOnHit: heal a small amount per combo stack above 5 on a correct
+    // answer. Lets Rogue's Blood-Dance lane sustain through a long combat.
+    const comboHealRate = Number(outcome.relicMods.comboHealOnHit || 0);
+    if (comboHealRate > 0 && player.combo > 5 && player.hp < player.maxHp) {
+      const healAmount = Math.max(1, Math.floor(comboHealRate * (player.combo - 5)));
+      const cappedHeal = Math.min(healAmount, player.maxHp - player.hp);
+      if (cappedHeal > 0) {
+        player.hp += cappedHeal;
+        popups.push({ target: "player", amount: cappedHeal, style: "heal", lane: 3, tag: "COMBO" });
+      }
+    }
+
+    // bonusEnergyOnHardCorrect: refund energy for landing a HARD problem
+    // quickly. Wizard's Arcana lane uses this for active energy generation.
+    const energyRefundOnHard = Math.floor(Number(outcome.relicMods.bonusEnergyOnHardCorrect || 0));
+    if (energyRefundOnHard > 0 && action.difficulty === "HARD" && outcome.preview.quick) {
+      const cap = nextBattle.energyMax || nextBattle.energy + energyRefundOnHard;
+      const before = nextBattle.energy || 0;
+      nextBattle.energy = Math.min(cap, before + energyRefundOnHard);
+      const restored = nextBattle.energy - before;
+      if (restored > 0) {
+        popups.push({ target: "player", amount: restored, style: "status", lane: 4, tag: "ENERGY" });
+      }
+    }
+
+    // Consume the "next action free" charge if it was used for this action.
+    if (player.nextActionFree) {
+      player.nextActionFree = false;
+    }
+
     applySpellCritRefund(nextBattle, action, outcome, popups);
     applyCritEnergyRefund(nextBattle, outcome, popups);
 
@@ -2464,7 +2846,18 @@ function resolveTurnFromOutcome(run, player, nextBattle, action, outcome) {
         ? "utility-buff"
         : action.type.toLowerCase();
   } else {
-    player.combo = outcome.relicMods.softComboBreak ? Math.floor(player.combo / 2) : 0;
+    // comboFloorOnAct: combo never falls below this floor in the current act,
+    // softening the punishment for a single wrong answer in long Rogue runs.
+    const baseCombo = outcome.relicMods.softComboBreak ? Math.floor(player.combo / 2) : 0;
+    const comboFloor = Math.max(0, Math.floor(Number(outcome.relicMods.comboFloorOnAct || 0)));
+    player.combo = Math.max(baseCombo, comboFloor);
+    // nextActionFreeAfterMiss: the very next action after a miss costs no
+    // energy. Tempo-recovery key for Rogue/Wizard.
+    if (outcome.relicMods.nextActionFreeAfterMiss) {
+      player.nextActionFree = true;
+    } else if (player.nextActionFree) {
+      player.nextActionFree = false;
+    }
     nextBattle.feedback = action.type === "ULTIMATE" ? "ULTIMATE MISSED!" : "MISS!";
     nextBattle.playerMotion = action.type === "ULTIMATE" ? `${player.legendId}-ultimate` : "misfire";
   }
@@ -2516,11 +2909,17 @@ export function answerCurrentProblem(run, answer, now) {
   const isCorrect = Number(answer) === action.problem.answer;
   const relicMods = getRelicModifiers(player);
   const elapsed = Math.max(0, now - battle.problemStartedAt);
+  const targetEnemy = nextBattle.enemies.find((enemy) => enemy.id === nextBattle.targetEnemyId) || nextBattle.enemies[0];
+  const targetEnemyHpPct = targetEnemy && targetEnemy.maxHp
+    ? Math.max(0, Math.min(1, targetEnemy.hp / targetEnemy.maxHp))
+    : 1;
   const preview = getActionPreview(player, action, {
     combo: player.combo,
     elapsed,
     relicMods,
     turnActionsPlayed: battle.turnActionsPlayed || 0,
+    targetEnemyHpPct,
+    quickWindowMs: getQuickWindowMs(run),
   });
   const actionCost = battle.selectedActionCost ?? getActionCost(player, action, {
     relicMods,
@@ -2776,6 +3175,7 @@ export function claimVictory(run) {
   const selectedTraining = reward.trainingChoices?.find((choice) => choice.id === reward.selectedTrainingId) || null;
   const trainingLog = applyTrainingReward(player, selectedTraining);
   player.battleBuffs = [];
+  consumeRunModifiersAfterBattle(player);
   const nextMetaRewards = addMaterialStock(run.metaRewards, reward.materials);
   player.herbs = addHerbStock(player.herbs, reward.herbs || {});
   player.floor += 1;
@@ -3177,14 +3577,38 @@ export function serializeProfile(run) {
   return clone(run);
 }
 
+function ensureAchievementsState(achievements = {}) {
+  const unlocked = Array.isArray(achievements?.unlocked)
+    ? achievements.unlocked.filter((id) => !!getAchievementById(id))
+    : [];
+  return {
+    unlocked,
+    reveal: achievements?.reveal || null,
+  };
+}
+
+function isRunVictory(run) {
+  return !!(run && run.player && Number(run.player.floor || 0) >= MAP_HEIGHT);
+}
+
+function isRunDefeat(run) {
+  if (!run) return false;
+  if (run.screen === SCREEN.GAMEOVER || run.screen === "GAMEOVER") return true;
+  return Number(run?.player?.hp ?? 1) <= 0;
+}
+
 export function createEmptyProfile() {
   return {
     bestRunFloor: 0,
     totalRuns: 0,
     totalWins: 0,
+    totalDefeats: 0,
     base: ensureBaseState(),
     unlockReveal: null,
     lastRun: null,
+    achievements: ensureAchievementsState(),
+    questionHistory: {},
+    preferredTierId: DEFAULT_TIER_ID,
   };
 }
 
@@ -3194,18 +3618,56 @@ export function hydrateProfile(profile) {
   next.bestRunFloor = Number(next.bestRunFloor || 0);
   next.totalRuns = Number(next.totalRuns || 0);
   next.totalWins = Number(next.totalWins || 0);
+  next.totalDefeats = Number(next.totalDefeats || 0);
   next.unlockReveal = next.unlockReveal || null;
   next.lastRun = next.lastRun || null;
+  next.achievements = ensureAchievementsState(next.achievements);
+  // Default missing/unknown tier ids to the as-shipped tier so older saves
+  // load identically.
+  next.preferredTierId = CLIMB_TIERS.some((tier) => tier.id === next.preferredTierId)
+    ? next.preferredTierId
+    : DEFAULT_TIER_ID;
+  next.questionHistory = next.questionHistory && typeof next.questionHistory === "object"
+    ? Object.fromEntries(Object.entries(next.questionHistory).map(([key, list]) => [
+        key,
+        Array.isArray(list) ? list.slice(-150) : [],
+      ]))
+    : {};
   return next;
 }
 
-export function updateProfile(profile, run, completed = false) {
+export function updateProfile(profile, run, completedOrOptions = false) {
   const next = hydrateProfile(profile || createEmptyProfile());
-  next.totalRuns += completed ? 1 : 0;
-  next.totalWins += completed && run.player.floor >= MAP_HEIGHT ? 1 : 0;
-  next.bestRunFloor = Math.max(next.bestRunFloor, run.player.floor);
+  if (!run) {
+    return next;
+  }
+
+  const options = typeof completedOrOptions === "object" && completedOrOptions !== null
+    ? completedOrOptions
+    : { completed: !!completedOrOptions };
+  const victory = !!options.completed || isRunVictory(run);
+  const defeat = !victory && isRunDefeat(run);
+
+  if (victory) {
+    next.totalRuns += 1;
+    next.totalWins += 1;
+  } else if (defeat) {
+    next.totalRuns += 1;
+    next.totalDefeats += 1;
+  }
+
+  next.bestRunFloor = Math.max(next.bestRunFloor, Number(run.player?.floor || 0));
   next.base.materials = addMaterialStock(next.base.materials, run.metaRewards);
   next.lastRun = serializeProfile(run);
+
+  // Roll up the consumed-problem texts so the next run for this spire starts
+  // its bank with cross-run dedupe. Always do this — even an aborted run may
+  // have asked the player a meaningful number of questions.
+  const withHistory = appendQuestionHistory(next, run);
+  next.questionHistory = withHistory.questionHistory;
+
+  const evaluation = evaluateAchievements(next, run);
+  next.achievements = evaluation.achievements;
   return next;
 }
 
@@ -3220,6 +3682,8 @@ export function upgradeBaseBuilding(profile, buildingId) {
   next.base.materials = spendMaterialCost(next.base.materials, upgrade.cost);
   next.base.buildings[buildingId] = currentTier + 1;
   next.unlockReveal = buildUnlockReveal(buildingId, upgrade);
+  const evaluation = evaluateAchievements(next, null);
+  next.achievements = evaluation.achievements;
   return next;
 }
 
@@ -3227,6 +3691,21 @@ export function dismissUnlockReveal(profile) {
   const next = hydrateProfile(profile);
   next.unlockReveal = null;
   return next;
+}
+
+export function dismissAchievementReveal(profile) {
+  const next = hydrateProfile(profile);
+  if (next.achievements?.reveal) {
+    next.achievements = {
+      ...next.achievements,
+      reveal: null,
+    };
+  }
+  return next;
+}
+
+export function getAchievementCatalog() {
+  return ACHIEVEMENT_DEFS.map((definition) => ({ ...definition }));
 }
 
 export function getBattleTimeLeft(run, now) {

@@ -1,20 +1,25 @@
-import { ACT_TIME_LIMITS, HERBS, LEGENDS, MAP_HEIGHT, MATERIALS, NODE_ASSETS, NODE_ICONS, POTIONS, SCREEN, SPIRES } from "./data.js";
+import { ACT_TIME_LIMITS, CLIMB_TIERS, DEFAULT_TIER_ID, HERBS, LEGENDS, MAP_HEIGHT, MATERIALS, NODE_ASSETS, NODE_ICONS, POTIONS, SCREEN, SPIRES } from "./data.js";
 import {
   canAffordAction,
   getBattleBuffSummary,
   describeActionPreviewClean,
+  getAchievementCatalog,
   getActForFloor,
   getActionCost,
   getBattleTimeLimit,
   getBaseUpgradeCards,
+  getClimbTier,
   getLegend,
   getNextRestTraining,
   getPlayerMechanicSummary,
   getReachableNodes,
+  getRunModifierSummary,
   getSkillTreeState,
   getSpire,
   getUnlockedSpireIds,
+  isSpireAllowedAtTier,
 } from "./engine.js";
+import { getAchievementById } from "./achievements.js";
 
 const SHELL_BACKDROPS = {
   hub: "./assets/backgrounds/bg-hub-frontier.webp",
@@ -101,13 +106,16 @@ function formatCompactImpact(action, info) {
     }
     return `${preview.normalAmount} restore${notes.length ? ` | ${notes.join(" | ")}` : ""}`;
   }
-  const amountLabel = action.type === "DEFEND"
+  // Type tag for defensive actions is "DEF" (see BASE_ACTIONS in data.js).
+  // We were checking "DEFEND" here, so the branch never matched and barrier
+  // actions like Guard / Prism Ward fell through to the damage label.
+  const amountLabel = action.type === "DEF"
     ? `${preview.normalAmount} block`
     : action.type === "AOE"
       ? `${preview.normalAmount} to all`
       : `${preview.normalAmount} dmg`;
   const notes = [];
-  if (action.type !== "DEFEND") notes.push(`${preview.critAmount} crit`);
+  if (action.type !== "DEF") notes.push(`${preview.critAmount} crit`);
   if (preview.hits > 1) notes.push(`${preview.hits} hits`);
   if (preview.secondaryBlock) notes.push(`+${preview.secondaryBlock} ward`);
   if (preview.guardHealOnCorrect) notes.push(`+${preview.guardHealOnCorrect} mend`);
@@ -116,7 +124,13 @@ function formatCompactImpact(action, info) {
 
 function tooltipAttr(text) {
   if (!text) return "";
-  return `data-tooltip="${String(text).replaceAll('"', "&quot;")}"`;
+  // Encode real newlines as &#10; so the attribute round-trips into a real
+  // \n character; combined with `white-space: pre-line` on the tooltip
+  // pseudo-element this lets a single tooltip render multiple stacked lines.
+  const escaped = String(text)
+    .replaceAll('"', "&quot;")
+    .replaceAll("\n", "&#10;");
+  return `data-tooltip="${escaped}"`;
 }
 
 function escapeAttr(text) {
@@ -341,6 +355,19 @@ function renderPotionRack(player, options = {}) {
   `;
 }
 
+function renderModifierRows(modifiers = []) {
+  if (!modifiers.length) {
+    return `<div class="snapshot-item"><strong>No active omens</strong><span>The climb is clear of temporary boons and curses.</span></div>`;
+  }
+  return modifiers.map((modifier) => `
+    <div class="snapshot-item omen-item omen-${modifier.tone}">
+      <strong>${modifier.name}</strong>
+      <span>${modifier.description}</span>
+      <em>${modifier.battlesLeft} battle${modifier.battlesLeft === 1 ? "" : "s"} left</em>
+    </div>
+  `).join("");
+}
+
 function renderRewardHerbs(herbs = {}) {
   const rows = getHerbRows(herbs);
   if (!rows.length) return "";
@@ -431,6 +458,7 @@ function renderHeader(profile, run, setup = null) {
 
   const legend = getLegend(run.player.legendId);
   const spire = getSpire(run.spireId);
+  const tier = getClimbTier(run.tierId);
   const act = getActForFloor(run.player.floor);
   const hpPct = pct(run.player.hp / Math.max(1, run.player.maxHp));
 
@@ -439,7 +467,7 @@ function renderHeader(profile, run, setup = null) {
       <div class="legend-header">
         <div class="legend-badge ${legend.color}">${renderArtBadge({ asset: legend.asset, fallback: legend.icon, alt: legend.name, className: "avatar-art badge-art" })}</div>
         <div>
-          <p class="eyebrow">${legend.name.toUpperCase()} | ${spire.name.toUpperCase()}</p>
+          <p class="eyebrow">${legend.name.toUpperCase()} | ${spire.name.toUpperCase()} <span class="run-tier-badge" title="Climb tier — sets the math content level">${tier.name}</span></p>
           <h1>Act ${act} | Floor ${run.player.floor + 1}</h1>
         </div>
       </div>
@@ -504,21 +532,70 @@ function renderSpireCards(setup, profile) {
 }
 
 function renderHubSteps(phase) {
-  const legendActive = phase === "legend";
-  const spireActive = phase === "spire";
+  // Three-step setup: Legend -> Spire -> Tier. A pill is "is-active" when
+  // it's the current step, "is-complete" once the user has progressed past
+  // it, otherwise neutral.
+  const order = ["legend", "spire", "tier"];
+  const currentIndex = order.indexOf(phase);
+  const stepClass = (index) => {
+    if (currentIndex < 0) return "";
+    if (index === currentIndex) return "is-active";
+    if (index < currentIndex) return "is-complete";
+    return "";
+  };
   return `
     <div class="hub-step-row" aria-label="Run setup progress">
-      <div class="hub-step-pill ${legendActive ? "is-active" : "is-complete"}">
+      <div class="hub-step-pill ${stepClass(0)}">
         <span>1</span>
         <strong>Legend</strong>
       </div>
-      <div class="hub-step-connector ${spireActive ? "is-active" : ""}"></div>
-      <div class="hub-step-pill ${spireActive ? "is-active" : ""}">
+      <div class="hub-step-connector ${currentIndex >= 1 ? "is-active" : ""}"></div>
+      <div class="hub-step-pill ${stepClass(1)}">
         <span>2</span>
         <strong>Spire</strong>
       </div>
+      <div class="hub-step-connector ${currentIndex >= 2 ? "is-active" : ""}"></div>
+      <div class="hub-step-pill ${stepClass(2)}">
+        <span>3</span>
+        <strong>Tier</strong>
+      </div>
     </div>
   `;
+}
+
+function renderTierCards(setup, profile) {
+  const selectedSpireId = setup.spireId;
+  const selectedTierId = setup.tierId || profile?.preferredTierId || DEFAULT_TIER_ID;
+  return CLIMB_TIERS.map((tier) => {
+    const compatible = !selectedSpireId || isSpireAllowedAtTier(selectedSpireId, tier.id);
+    const selected = tier.id === selectedTierId;
+    const disabledOps = ["+", "-", "*", "/"].filter((op) => !(tier.allowedOps || []).includes(op));
+    const opsTag = disabledOps.length
+      ? `<span class="tier-card-ops-tag">No ${disabledOps.map((op) => op === "+" ? "addition" : op === "-" ? "subtraction" : op === "*" ? "multiplication" : "division").join(" / ")}</span>`
+      : `<span class="tier-card-ops-tag">All four operations</span>`;
+    const timerTag = tier.timerMultiplier === 1
+      ? "Standard timer"
+      : tier.timerMultiplier > 1
+        ? `+${Math.round((tier.timerMultiplier - 1) * 100)}% timer`
+        : `${Math.round((tier.timerMultiplier - 1) * 100)}% timer`;
+    const incompatibleNote = compatible ? "" : `<span class="tier-card-warning">Locks ${getSpire(selectedSpireId)?.name || "the chosen spire"}</span>`;
+    return `
+      <button class="tier-select-card ${selected ? "is-selected" : ""} ${compatible ? "" : "is-incompatible"}" data-action="select-tier" data-tier-id="${tier.id}">
+        <div class="tier-card-head">
+          <p class="eyebrow">${tier.audience}</p>
+          <h3>${tier.name}</h3>
+        </div>
+        <p class="tier-card-summary">${tier.summary}</p>
+        <p class="tier-card-detail">${tier.description}</p>
+        <div class="tier-card-footer">
+          ${opsTag}
+          <span class="tier-card-timer-tag">${timerTag}</span>
+        </div>
+        ${incompatibleNote}
+        ${selected ? `<div class="tier-selected-flag">Chosen</div>` : ""}
+      </button>
+    `;
+  }).join("");
 }
 
 function renderSelectedLegendCard(legend) {
@@ -551,6 +628,12 @@ function renderSpirePhaseLegendTag(legend) {
       <button class="header-button subtle spire-phase-change" data-action="change-legend">Change Legend</button>
     </div>
   `;
+}
+
+function renderLandingAchievementOverlay(profile) {
+  const reveal = profile?.achievements?.reveal;
+  if (!reveal) return "";
+  return renderAchievementRevealModal(reveal);
 }
 
 function renderLanding(profile, setup) {
@@ -595,6 +678,7 @@ function renderLanding(profile, setup) {
           <div class="landing-meta-pill"><span>Gates Lit</span><strong>${unlockedCount}/${SPIRES.length}</strong></div>
         </div>
       </div>
+      ${renderLandingAchievementOverlay(profile)}
     </section>
   `;
 }
@@ -674,6 +758,7 @@ function renderBase(profile) {
   const cards = getBaseUpgradeCards(profile);
   const base = profile.base;
   const unlockReveal = profile.unlockReveal;
+  const achievementReveal = profile.achievements?.reveal;
   return `
     <section class="hub-screen base-screen">
       <div class="hub-phase-header base-phase-header">
@@ -693,6 +778,7 @@ function renderBase(profile) {
         </div>
         ${renderPortalTrack(profile, null, "full")}
       </section>
+      ${renderAchievementsPanel(profile)}
       <div class="base-grid">
         ${cards.map((card) => `
           <section class="base-card ${card.id === "portalArray" ? "portal-array-card" : ""}">
@@ -724,7 +810,68 @@ function renderBase(profile) {
           </section>
         `).join("")}
       </div>
-      ${unlockReveal ? renderUnlockRevealModal(unlockReveal) : ""}
+      ${unlockReveal
+        ? renderUnlockRevealModal(unlockReveal)
+        : achievementReveal ? renderAchievementRevealModal(achievementReveal) : ""}
+    </section>
+  `;
+}
+
+function renderAchievementsPanel(profile) {
+  const catalog = getAchievementCatalog();
+  const unlocked = new Set(profile?.achievements?.unlocked || []);
+  if (!catalog.length) return "";
+  const earned = catalog.filter((entry) => unlocked.has(entry.id));
+  return `
+    <section class="base-achievements-band">
+      <div class="section-copy section-copy-row">
+        <h3>Field Honors</h3>
+        <span class="base-achievements-tally">${earned.length}/${catalog.length} earned</span>
+      </div>
+      <div class="achievements-grid">
+        ${catalog.map((entry) => {
+          const isUnlocked = unlocked.has(entry.id);
+          return `
+            <article class="achievement-card ${isUnlocked ? "is-earned" : "is-locked"}">
+              <div class="achievement-card-mark">${isUnlocked ? "★" : "·"}</div>
+              <div class="achievement-card-body">
+                <strong>${isUnlocked ? entry.name : "Locked Honor"}</strong>
+                <p>${isUnlocked ? entry.description : entry.hint || entry.description}</p>
+              </div>
+            </article>
+          `;
+        }).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderAchievementRevealModal(reveal) {
+  const ids = Array.isArray(reveal?.ids) ? reveal.ids : [];
+  const definitions = ids
+    .map((id) => getAchievementById(id))
+    .filter(Boolean);
+  if (!definitions.length) return "";
+  const isMulti = definitions.length > 1;
+  return `
+    <section class="modal-backdrop">
+      <div class="utility-modal achievement-reveal-modal">
+        <p class="eyebrow">${isMulti ? `${definitions.length} New Honors` : "New Honor"}</p>
+        <h2>${isMulti ? "Field Honors Earned" : definitions[0].name}</h2>
+        ${isMulti ? "" : `<p class="utility-copy">${definitions[0].description}</p>`}
+        <div class="achievement-reveal-grid">
+          ${definitions.map((entry) => `
+            <article class="achievement-card is-earned achievement-reveal-card">
+              <div class="achievement-card-mark">★</div>
+              <div class="achievement-card-body">
+                <strong>${entry.name}</strong>
+                <p>${entry.description}</p>
+              </div>
+            </article>
+          `).join("")}
+        </div>
+        <button class="header-button primary utility-close" data-action="dismiss-achievement-reveal">Take The Honor</button>
+      </div>
     </section>
   `;
 }
@@ -769,54 +916,99 @@ function renderHub(profile, setup) {
   const selectedSpire = setup.spireId ? getSpire(setup.spireId) : null;
   const unlockedSpireIds = new Set(getUnlockedSpireIds(profile));
   const selectedSpireUnlocked = selectedSpire ? unlockedSpireIds.has(selectedSpire.id) : false;
+  const tierFallbackId = setup.tierId || profile?.preferredTierId || DEFAULT_TIER_ID;
+  const selectedTier = getClimbTier(tierFallbackId);
+  const tierAllowsSpire = selectedSpire ? isSpireAllowedAtTier(selectedSpire.id, selectedTier.id) : true;
+  const canBeginRun = !!selectedSpire && selectedSpireUnlocked && tierAllowsSpire;
   const heroCopy = phase === "legend"
     ? "Choose the legend who will answer the climb."
-    : `Choose the road ${selectedLegend?.name || "your legend"} will tread.`;
+    : phase === "spire"
+      ? `Choose the road ${selectedLegend?.name || "your legend"} will tread.`
+      : `Choose the difficulty for this climb. The act-by-act ramp still happens — only the math content scales.`;
 
-  return `
-    <section class="hub-screen ${phase === "spire" ? "hub-screen-spire" : "hub-screen-legend"}">
-      ${phase === "legend" ? `
-        <div class="hub-phase-header legend-phase-header">
-          <div class="hub-phase-copy">
-            <p class="eyebrow">Step 1 Of 2</p>
-            <h2>Choose Your Legend</h2>
-            <p>${heroCopy}</p>
-          </div>
-          <div class="legend-phase-actions">
+  const beginButtonLabel = selectedSpire
+    ? selectedSpireUnlocked
+      ? tierAllowsSpire
+        ? `Begin ${selectedSpire.name}`
+        : "Tier Blocks Spire"
+      : "Portal Locked"
+    : "Choose Spire First";
+
+  const phaseHeader = phase === "legend"
+    ? `
+      <div class="hub-phase-header legend-phase-header">
+        <div class="hub-phase-copy">
+          <p class="eyebrow">Step 1 Of 3</p>
+          <h2>Choose Your Legend</h2>
+          <p>${heroCopy}</p>
+        </div>
+        <div class="legend-phase-actions">
+          <button class="header-button ghost" data-action="open-base">Outpost</button>
+          <button class="header-button ghost" data-action="back-to-home">Back</button>
+          ${renderHubSteps(phase)}
+        </div>
+      </div>`
+    : phase === "spire"
+      ? `
+      <div class="hub-phase-header">
+        <div class="hub-phase-copy">
+          <p class="eyebrow">Step 2 Of 3</p>
+          <h2>Choose Your Spire</h2>
+          <p>${heroCopy}</p>
+        </div>
+        <div class="phase-header-actions spire-header-actions">
+          <div class="spire-top-actions">
             <button class="header-button ghost" data-action="open-base">Outpost</button>
-            <button class="header-button ghost" data-action="back-to-home">Back</button>
             ${renderHubSteps(phase)}
           </div>
+          ${renderSpirePhaseLegendTag(selectedLegend)}
         </div>
-      ` : `
-        <div class="hub-phase-header">
-          <div class="hub-phase-copy">
-            <p class="eyebrow">Step 2 Of 2</p>
-            <h2>Choose Your Spire</h2>
-            <p>${heroCopy}</p>
-          </div>
-          <div class="phase-header-actions spire-header-actions">
-            <div class="spire-top-actions">
-              <button class="header-button ghost" data-action="open-base">Outpost</button>
-              ${renderHubSteps(phase)}
-            </div>
-            ${renderSpirePhaseLegendTag(selectedLegend)}
-          </div>
+      </div>`
+      : `
+      <div class="hub-phase-header">
+        <div class="hub-phase-copy">
+          <p class="eyebrow">Step 3 Of 3</p>
+          <h2>Choose Your Tier</h2>
+          <p>${heroCopy}</p>
         </div>
-      `}
+        <div class="phase-header-actions tier-header-actions">
+          <div class="spire-top-actions">
+            <button class="header-button ghost" data-action="open-base">Outpost</button>
+            <button class="header-button ghost" data-action="change-spire">Change Spire</button>
+            ${renderHubSteps(phase)}
+          </div>
+          ${renderSpirePhaseLegendTag(selectedLegend)}
+        </div>
+      </div>`;
+
+  const phaseBody = phase === "legend"
+    ? `
+      <div class="hub-section legend-stage-section">
+        <div class="legend-select-grid legend-stage-grid">${renderLegendCards(setup)}</div>
+      </div>`
+    : phase === "spire"
+      ? `
+      <div class="hub-section spire-stage-section">
+        <div class="spire-select-grid">${renderSpireCards(setup, profile)}</div>
+        <div class="spire-stage-cta">
+          <button class="header-button primary hub-start-button" data-action="advance-to-tier" ${selectedSpireUnlocked ? "" : "disabled"}>${selectedSpire ? (selectedSpireUnlocked ? `Continue To Tier` : "Portal Locked") : "Choose Spire First"}</button>
+        </div>
+      </div>`
+      : `
+      <div class="hub-section tier-stage-section">
+        <div class="tier-select-grid">${renderTierCards({ ...setup, tierId: selectedTier.id }, profile)}</div>
+        <div class="spire-stage-cta">
+          <button class="header-button primary hub-start-button" data-action="start-run" ${canBeginRun ? "" : "disabled"}>${beginButtonLabel}</button>
+        </div>
+      </div>`;
+
+  const hubScreenClass = phase === "tier" ? "hub-screen-tier" : phase === "spire" ? "hub-screen-spire" : "hub-screen-legend";
+
+  return `
+    <section class="hub-screen ${hubScreenClass}">
+      ${phaseHeader}
       <div class="hub-body">
-        ${phase === "legend" ? `
-          <div class="hub-section legend-stage-section">
-            <div class="legend-select-grid legend-stage-grid">${renderLegendCards(setup)}</div>
-          </div>
-        ` : `
-          <div class="hub-section spire-stage-section">
-            <div class="spire-select-grid">${renderSpireCards(setup, profile)}</div>
-            <div class="spire-stage-cta">
-              <button class="header-button primary hub-start-button" data-action="start-run" ${selectedSpireUnlocked ? "" : "disabled"}>${selectedSpire ? (selectedSpireUnlocked ? `Begin ${selectedSpire.name}` : "Portal Locked") : "Choose Spire First"}</button>
-            </div>
-          </div>
-        `}
+        ${phaseBody}
       </div>
     </section>
   `;
@@ -908,12 +1100,14 @@ function renderRunRail(run) {
   const act = getActForFloor(run.player.floor);
   const herbTotal = Object.values(run.player.herbs || {}).reduce((sum, amount) => sum + Math.max(0, Number(amount || 0)), 0);
   const potionTotal = Object.values(run.player.potions || {}).reduce((sum, amount) => sum + Math.max(0, Number(amount || 0)), 0);
+  const modifiers = getRunModifierSummary(run.player);
   const readyNodes = skillTree.lanes.reduce((sum, lane) => sum + lane.nodes.filter((node) => node.status === "available").length, 0);
   const ownedNodes = skillTree.lanes.reduce((sum, lane) => sum + lane.nodes.filter((node) => node.status === "owned").length, 0);
   const activePanel = run.routePanel || "";
   const panelButtons = [
     { id: "stats", label: "Stats", meta: `${run.player.stats.str}/${run.player.stats.vit}/${run.player.stats.focus}` },
     { id: "skill-tree", label: "Skill Tree", meta: `${ownedNodes} learned | ${readyNodes} ready` },
+    { id: "omens", label: "Omens", meta: modifiers.length ? `${modifiers.length} active` : "quiet" },
     { id: "potions", label: "Potions", meta: `${herbTotal} herbs | ${potionTotal} tonics` },
     { id: "relics", label: "Relics", meta: `${run.player.relics.length} carried` },
   ];
@@ -956,12 +1150,14 @@ function renderRoutePanel(run) {
   const legend = getLegend(run.player.legendId);
   const mechanics = getPlayerMechanicSummary(run.player);
   const skillTree = getSkillTreeState(run.player);
+  const modifiers = getRunModifierSummary(run.player);
   const herbTotal = Object.values(run.player.herbs || {}).reduce((sum, amount) => sum + Math.max(0, Number(amount || 0)), 0);
   const potionTotal = Object.values(run.player.potions || {}).reduce((sum, amount) => sum + Math.max(0, Number(amount || 0)), 0);
   const logNote = run.log[run.log.length - 1] || "Choose the next foothold when you're ready.";
   const panelLabels = {
     stats: "Stats",
     "skill-tree": "Skill Tree",
+    omens: "Omens",
     potions: "Potions",
     relics: "Relics",
   };
@@ -969,6 +1165,7 @@ function renderRoutePanel(run) {
   const panelMeta = {
     stats: `${run.player.stats.str}/${run.player.stats.vit}/${run.player.stats.focus}`,
     "skill-tree": `${skillTree.points} point${skillTree.points === 1 ? "" : "s"} banked`,
+    omens: modifiers.length ? `${modifiers.length} active` : "No active omens",
     potions: `${herbTotal} herbs | ${potionTotal} tonics`,
     relics: `${run.player.relics.length} carried`,
   };
@@ -1005,6 +1202,14 @@ function renderRoutePanel(run) {
       <div class="route-panel-potions">
         ${renderHerbPills(run.player.herbs, { includeEmpty: true })}
         ${renderPotionRack(run.player, { mode: "map" })}
+      </div>
+    `;
+  }
+
+  if (panel === "omens") {
+    body = `
+      <div class="route-panel-grid omen-grid">
+        ${renderModifierRows(modifiers)}
       </div>
     `;
   }
@@ -1097,7 +1302,7 @@ function renderSkillTree(run) {
           </div>
         </div>
         <div class="skill-tree-lanes">
-          ${tree.lanes.map((lane) => `
+          ${tree.lanes.map((lane, laneIndex) => `
             <div class="skill-lane" data-skill-lane="${lane.id}">
               <div class="skill-lane-head">
                 <p class="eyebrow">${lane.name}</p>
@@ -1105,14 +1310,29 @@ function renderSkillTree(run) {
               </div>
               <div class="skill-lane-track">
                 ${lane.nodes.map((node, index) => {
+                  // Last (rightmost) lane gets the tooltip flipped to the
+                  // left so it doesn't clip off the right edge of the modal.
+                  const tooltipFlipClass = laneIndex === tree.lanes.length - 1 ? "tooltip-flip-left" : "";
                   const statLines = formatSkillEffect(node.effect || {}, node.level || 1);
                   const canAct = (node.status === "available" || node.isUpgradeable) && tree.points > 0;
                   const isMaxed = node.status === "owned" && !node.isUpgradeable;
-                  const nodeTooltip = [node.label, node.description, ...statLines.slice(0, 3)].filter(Boolean).join(" | ");
-                  const levelPips = node.maxLevel > 1
-                    ? `<div class="skill-node-levels">${Array.from({ length: node.maxLevel }, (_, i) => `<span class="${i < (node.level || 0) ? "pip-filled" : "pip-empty"}"></span>`).join("")}</div>`
-                    : "";
                   const badgeLabel = isMaxed ? "Maxed" : node.isUpgradeable ? `Upgrade → L${(node.level || 0) + 1}` : node.status === "available" ? "Learn" : "Locked";
+                  // Tooltip carries the description + stat tags + level info so
+                  // the compact card body only has to show the name. Use a
+                  // single delimited string because the tooltip-anchor element
+                  // renders the data-tooltip attribute as plain text.
+                  // Tooltip text uses real newlines so the hover bubble can
+                  // render description, effect list, and level info on
+                  // separate lines via `white-space: pre-line` in CSS.
+                  const tooltipParts = [
+                    node.description,
+                    statLines.length ? `Effect: ${statLines.join(" • ")}` : null,
+                    node.maxLevel > 1 ? `Level ${node.level || 0}/${node.maxLevel}` : null,
+                  ].filter(Boolean);
+                  const nodeTooltip = `${node.label}\n${tooltipParts.join("\n")}`;
+                  const levelChip = node.maxLevel > 1
+                    ? `<span class="skill-node-level-chip">L${node.level || 0}/${node.maxLevel}</span>`
+                    : "";
                   return `
                   <div class="skill-node-step ${index === lane.nodes.length - 1 ? "is-last" : ""}">
                     <div class="skill-node-spine" aria-hidden="true">
@@ -1120,21 +1340,18 @@ function renderSkillTree(run) {
                       ${index === lane.nodes.length - 1 ? "" : `<span class="skill-node-link"></span>`}
                     </div>
                     <button
-                      class="skill-node skill-node-${isMaxed ? "owned" : node.status} tooltip-anchor"
+                      class="skill-node skill-node-compact skill-node-${isMaxed ? "owned" : node.status} tooltip-anchor ${tooltipFlipClass}"
                       data-action="unlock-skill-node"
                       data-skill-node-id="${node.id}"
                       title="${escapeAttr(nodeTooltip)}"
                       ${tooltipAttr(nodeTooltip)}
                       ${canAct ? "" : "disabled"}
                     >
-                      <div class="skill-node-topline">
-                        <span class="skill-node-tier">Tier ${node.tier}</span>
-                        <em>${badgeLabel.replace("â†’", "to")}</em>
+                      <div class="skill-node-name-row">
+                        <strong>${node.label}</strong>
+                        ${levelChip}
                       </div>
-                      <strong>${node.label}</strong>
-                      <span class="skill-node-copy">${node.description}</span>
-                      ${levelPips}
-                      ${statLines.length ? `<div class="skill-node-stats">${statLines.slice(0, 2).map((line) => `<span>${line}</span>`).join("")}</div>` : ""}
+                      <em class="skill-node-badge skill-node-badge-${isMaxed ? "owned" : node.status}">${badgeLabel.replace("â†’", "to")}</em>
                     </button>
                   </div>
                 `}).join("")}
@@ -1192,7 +1409,7 @@ function renderBattle(run, timeLeft) {
   const showBurst = battle.feedback && !["Choose an action.", "Solve fast."].includes(battle.feedback);
   const playerMotionClass = battle.playerMotion ? `motion-${battle.playerMotion}` : "";
   const activeBuffs = getBattleBuffSummary(player);
-  const actionCards = battle.hand.map((action) => {
+  const actionCards = battle.hand.map((action, handIndex) => {
     const info = describeActionPreviewClean(player, action);
     const impactLabel = formatCompactImpact(action, info);
     const liveCost = getActionCost(player, action, { turnActionsPlayed: battle.turnActionsPlayed || 0 });
@@ -1206,6 +1423,7 @@ function renderBattle(run, timeLeft) {
         data-action="select-action"
         data-action-id="${action.id}"
         title="${title}"
+        style="--hand-index:${handIndex};"
         ${affordable && !isEnemyPhase ? "" : "disabled"}
       >
         <div class="combat-card-key">${action.hotkey}</div>
@@ -1309,7 +1527,7 @@ function renderBattle(run, timeLeft) {
             <div class="problem-text">${selectedAction.problem.text}</div>
             <div class="answer-grid">
               ${selectedAction.problem.options.map((option, index) => `
-                <button class="answer-button" data-action="answer" data-answer="${option}">
+                <button class="answer-button" data-action="answer" data-answer="${option}" style="--answer-index:${index};">
                   <span class="answer-key">KEY ${index + 1}</span>
                   <span>${option}</span>
                 </button>
@@ -1354,20 +1572,20 @@ function renderVictory(run) {
             <h3>Choose One Prize</h3>
           </div>
           <div class="reward-draft-grid">
-            ${reward.trainingChoices.map((choice) => `
-              <button class="reward-draft-card ${reward.selectedTrainingId === choice.id ? "is-selected" : ""}" data-action="choose-victory-reward" data-reward-id="${choice.id}">
+            ${reward.trainingChoices.map((choice, rewardIndex) => `
+              <button class="reward-draft-card ${reward.selectedTrainingId === choice.id ? "is-selected" : ""}" data-action="choose-victory-reward" data-reward-id="${choice.id}" style="--reward-index:${rewardIndex};">
                 <strong>${choice.label}</strong>
                 <span>${choice.description}</span>
               </button>
             `).join("")}
-            <button class="reward-draft-card skip-card ${!reward.selectedTrainingId ? "is-selected" : ""}" data-action="choose-victory-reward" data-reward-id="skip">
+            <button class="reward-draft-card skip-card ${!reward.selectedTrainingId ? "is-selected" : ""}" data-action="choose-victory-reward" data-reward-id="skip" style="--reward-index:${reward.trainingChoices.length};">
               <strong>Pass For Now</strong>
               <span>Travel light and keep climbing.</span>
             </button>
           </div>
         </div>
         <div class="victory-footer">
-          <button class="header-button primary" data-action="claim-victory">Continue Ascent</button>
+          <button class="header-button primary continue-ascent-button" data-action="claim-victory">Continue Ascent</button>
         </div>
       </div>
     </section>
@@ -1379,7 +1597,7 @@ function renderRunReport(run) {
   const legend = getLegend(report.legendId || run.player.legendId);
   const spire = getSpire(report.spireId || run.spireId);
   const stars = Array.from({ length: 3 }, (_, index) => `
-    <div class="run-report-star ${index < report.stars ? "is-earned" : ""}">
+    <div class="run-report-star ${index < report.stars ? "is-earned" : ""}" style="--star-index:${index};">
       <span>&#9733;</span>
     </div>
   `).join("");
@@ -1410,7 +1628,7 @@ function renderRunReport(run) {
         </div>
         <div class="run-report-reasons">
           ${report.starReasons.map((reason, index) => `
-            <div class="run-report-reason ${index < report.stars ? "is-earned" : ""}">
+            <div class="run-report-reason ${index < report.stars ? "is-earned" : ""}" style="--star-index:${index};">
               <span>Star ${index + 1}</span>
               <strong>${reason}</strong>
             </div>
@@ -1711,13 +1929,63 @@ function renderShop(run) {
 }
 
 function renderGameOver(run) {
+  const report = run.runReport || {};
+  const legend = getLegend(run.player?.legendId);
+  const spire = getSpire(run.spireId || "mixed");
+  const floor = Number(report.floorDisplay || (Number(run.player?.floor || 0) + 1));
+  const accuracy = Number.isFinite(report.accuracy) ? report.accuracy : 0;
+  const elapsed = formatRunDuration(report.elapsedMs || run.elapsedMs || 0);
+  const monstersFelled = Math.max(0, Number(report.monstersKilled || 0));
+  const battlesCleared = Math.max(0, Number(report.battlesCleared || 0));
+  const elitesCleared = Math.max(0, Number(report.elitesCleared || 0));
+  const bossesCleared = Math.max(0, Number(report.bossesCleared || 0));
+  const totalDamage = Math.max(0, Number(report.damageDone || 0));
+  const totalCrits = Math.max(0, Number(report.totalCrits || 0));
+  const relicsCarried = Math.max(0, Number(report.relicsCarried || 0));
+  const materials = report.materialsBanked || run.metaRewards || {};
+  const hasMaterials = Object.values(materials).some((value) => Number(value || 0) > 0);
   return `
     <section class="modal-backdrop loss">
-      <div class="gameover-modal">
-        <p class="eyebrow">Run Ended</p>
-        <h2>Defeated</h2>
-        <p>Your legend fell on floor ${run.player.floor + 1}. Retry from the hub and push deeper on the next ascent.</p>
-        <button class="header-button primary" data-action="return-hub">Retry From Hub</button>
+      <div class="gameover-modal run-report-modal gameover-report-modal">
+        <div class="modal-accent"></div>
+        <div class="run-report-head">
+          <p class="eyebrow">Run Ended</p>
+          <h2>The Climb Is Broken</h2>
+          <p class="run-report-subcopy">${legend?.name || "Your legend"} fell on Floor ${floor} of ${MAP_HEIGHT} along ${spire?.name || "the spire"}. The frontier banks the salvage you carried.</p>
+        </div>
+        <div class="run-report-grid">
+          <div><span>Run Time</span><strong>${elapsed}</strong></div>
+          <div><span>Accuracy</span><strong>${accuracy}%</strong></div>
+          <div><span>Foes Felled</span><strong>${monstersFelled}</strong></div>
+          <div><span>Crits Landed</span><strong>${totalCrits}</strong></div>
+        </div>
+        <div class="run-report-grid secondary">
+          <div><span>Battles</span><strong>${battlesCleared}</strong></div>
+          <div><span>Elites</span><strong>${elitesCleared}</strong></div>
+          <div><span>Bosses</span><strong>${bossesCleared}</strong></div>
+          <div><span>Total Damage</span><strong>${totalDamage}</strong></div>
+        </div>
+        <div class="gameover-meta-row">
+          <div class="gameover-meta-card">
+            <span>Floor Reached</span>
+            <strong>${floor} / ${MAP_HEIGHT}</strong>
+          </div>
+          <div class="gameover-meta-card">
+            <span>Relics Carried</span>
+            <strong>${relicsCarried}</strong>
+          </div>
+        </div>
+        ${hasMaterials ? `
+          <div class="gameover-salvage">
+            <span>Salvage Banked</span>
+            <div class="gameover-salvage-row">${renderMaterialPills(materials, { includeEmpty: false })}</div>
+          </div>
+        ` : `
+          <p class="gameover-salvage-empty">No salvage made it back. Push to an Elite or Boss next run to bank materials.</p>
+        `}
+        <div class="victory-footer run-report-footer">
+          <button class="header-button primary" data-action="return-hub">Return To Camp</button>
+        </div>
       </div>
     </section>
   `;
@@ -1840,6 +2108,7 @@ export function buildGameText(state) {
         herb: Math.max(0, Number(run.player.herbs?.[potion.herbId] || 0)),
       })),
     };
+    payload.modifiers = getRunModifierSummary(run.player);
   }
 
   if (run.screen === SCREEN.EVENT) {
@@ -1916,6 +2185,10 @@ export function buildGameText(state) {
     payload.runReport = { ...run.runReport };
   }
 
+  if (run.screen === SCREEN.GAMEOVER && run.runReport) {
+    payload.runReport = { ...run.runReport };
+  }
+
   if (run.screen === SCREEN.BATTLE && run.battle) {
     const selectedAction = run.battle.hand.find((action) => action.id === run.battle.selectedActionId) || null;
     payload.battle = {
@@ -1940,7 +2213,6 @@ export function buildGameText(state) {
         style: popup.style,
         target: popup.target,
         lane: popup.lane || 0,
-        tag: popup.tag || null,
         delayMs: popup.delayMs || 0,
         variant: popup.variant || null,
       })),

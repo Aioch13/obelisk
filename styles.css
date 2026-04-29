@@ -107,6 +107,10 @@
 .run-report-reason strong {
   font-size: 1.05rem;
   font-weight: 900;
+  /* Was inheriting muted from the parent, which made the secondary stat row
+     near-invisible against the panel background. Force a high-contrast ink
+     so numbers always read clearly. */
+  color: var(--ink);
 }
 
 .run-report-reasons {
@@ -825,26 +829,32 @@ p {
 .base-resource-note {
   flex: 1;
   min-width: 240px;
-  background: rgba(255, 255, 255, 0.58);
-  border: 1px dashed var(--line);
+  /* Was rgba(255,255,255,0.58) which painted a giant white block over the
+     note copy and made the muted text invisible. Switched to a soft dark
+     panel that sits visually with the material chips next to it. */
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px dashed rgba(99, 102, 241, 0.18);
   border-radius: 22px;
   padding: 14px 18px;
-  color: var(--muted);
-  font-weight: 700;
+  color: var(--ink-soft);
+  font-weight: 600;
   line-height: 1.45;
-  font-size: 0.96rem;
+  font-size: 0.92rem;
 }
 
 .base-portal-band {
   display: grid;
   gap: 10px;
   padding: 16px 18px;
+  /* Was a near-opaque white-to-light-grey gradient meant for a light theme,
+     which white-washed the whole Gate Array on the dark Outpost view. Now
+     a soft dark panel with the same indigo glow accent at the corner. */
   background:
-    radial-gradient(circle at top left, rgba(79, 70, 229, 0.12), transparent 42%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.95));
-  border: 1px solid var(--line);
+    radial-gradient(circle at top left, rgba(79, 70, 229, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(18, 25, 44, 0.96), rgba(12, 18, 34, 0.96));
+  border: 1px solid rgba(99, 102, 241, 0.18);
   border-radius: 26px;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
 }
 
 .base-grid {
@@ -1099,10 +1109,12 @@ p {
 .landing-stage {
   place-items: center;
   align-content: center;
-  gap: 0;
+  gap: 14px;
   text-align: center;
-  padding: 20px 24px 24px;
-  overflow-y: auto;
+  padding: 12px 24px;
+  /* No scroll on the landing — the hero, save panel and meta pills are
+     compressed to fit a typical laptop viewport. */
+  overflow: hidden;
   background: radial-gradient(ellipse 70% 55% at 50% 35%, rgba(99,102,241,0.07), transparent);
 }
 
@@ -1110,8 +1122,8 @@ p {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 32px;
+  gap: 4px;
+  margin-bottom: 0;
 }
 
 .landing-mark .eyebrow {
@@ -1126,8 +1138,11 @@ p {
   flex-direction: column;
   align-items: center;
   gap: 0;
-  font-size: clamp(4rem, 10vw, 8.5rem);
-  line-height: 1;
+  /* Was clamp(3.4rem, 7.5vw, 6.4rem) which produced a ~100-120px tall title
+     and pushed the save panel + meta pills into a vertical scroll. Reined in
+     so the whole landing fits on a 900px viewport. */
+  font-size: clamp(2.4rem, 5.5vw, 4.4rem);
+  line-height: 0.95;
 }
 
 .landing-mark h2 em {
@@ -1154,27 +1169,28 @@ p {
 .landing-mark::after {
   content: "";
   display: block;
-  width: 80px;
+  width: 64px;
   height: 2px;
   background: linear-gradient(90deg, transparent, rgba(99,102,241,0.7), transparent);
   border-radius: 2px;
+  margin-top: 4px;
 }
 
 .landing-copy {
   max-width: 700px;
   color: var(--ink-soft);
-  font-size: 1.05rem;
-  margin-bottom: 52px;
+  font-size: 0.95rem;
+  margin-bottom: 0;
   font-weight: 700;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
 .landing-actions {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 28px;
+  gap: 10px;
+  margin-bottom: 0;
 }
 
 .landing-cta {
@@ -1190,17 +1206,17 @@ p {
 }
 
 .landing-button {
-  min-width: 190px;
-  padding: 14px 28px;
-  font-size: 0.98rem;
+  min-width: 180px;
+  padding: 10px 24px;
+  font-size: 0.94rem;
   font-weight: 900;
   letter-spacing: 0.01em;
 }
 
 .landing-button.primary {
-  min-width: 260px;
-  padding: 20px 52px;
-  font-size: 1.1rem;
+  min-width: 240px;
+  padding: 14px 44px;
+  font-size: 1.05rem;
   letter-spacing: 0.04em;
   box-shadow: 0 10px 36px rgba(99,102,241,0.45), 0 2px 8px rgba(0,0,0,0.5);
 }
@@ -1857,6 +1873,153 @@ p {
   min-height: 48px;
 }
 
+/* --- Tier select cards (Step 3 of run setup) ---------------------------- */
+
+.tier-stage-section {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.tier-select-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+@media (max-width: 1100px) {
+  .tier-select-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.tier-select-card {
+  background: var(--panel);
+  border: 2px solid rgba(255,255,255,0.08);
+  border-radius: 22px;
+  padding: 16px 14px 18px;
+  text-align: left;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  position: relative;
+  cursor: pointer;
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+  color: var(--ink);
+  min-height: 240px;
+}
+
+.tier-select-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--indigo);
+}
+
+.tier-select-card.is-selected {
+  border-color: var(--indigo);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35);
+  background: rgba(79, 70, 229, 0.08);
+}
+
+.tier-select-card.is-incompatible {
+  opacity: 0.55;
+  filter: grayscale(0.2);
+}
+
+.tier-card-head .eyebrow {
+  margin: 0;
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+}
+
+.tier-card-head h3 {
+  margin: 2px 0 0;
+  font-size: 1.32rem;
+  letter-spacing: -0.02em;
+}
+
+.tier-card-summary {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.tier-card-detail {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.tier-card-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.tier-card-ops-tag,
+.tier-card-timer-tag {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+}
+
+.tier-card-warning {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(244, 114, 114, 0.15);
+  color: #f47272;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  margin-top: 4px;
+}
+
+.tier-selected-flag {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(79, 70, 229, 0.18);
+  color: var(--indigo);
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.tier-header-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+/* Run header tier badge — shows the active tier inside a run so the
+   player always knows which difficulty is loaded. */
+.run-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(79, 70, 229, 0.12);
+  color: var(--indigo-light);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .spire-art {
   width: 100%;
   height: 100%;
@@ -2225,6 +2388,49 @@ p {
   gap: 10px;
 }
 
+.omen-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.omen-item {
+  gap: 6px;
+}
+
+.omen-item em {
+  font-style: normal;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.omen-boon {
+  border-color: rgba(16, 185, 129, 0.24);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.omen-boon em {
+  color: #6ee7b7;
+}
+
+.omen-curse {
+  border-color: rgba(244, 63, 94, 0.24);
+  background: rgba(127, 29, 29, 0.22);
+}
+
+.omen-curse em {
+  color: #fda4af;
+}
+
+.omen-bargain {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: rgba(120, 53, 15, 0.22);
+}
+
+.omen-bargain em {
+  color: #fcd34d;
+}
+
 .stats-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -2556,10 +2762,17 @@ p {
 
 .battle-screen {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  overflow: hidden;
+  display: grid;
+  /* Combat-tray (row 2) is the priority — it carries the action hand which
+     MUST stay visible. Was minmax(260px, 1fr) auto with overflow:hidden,
+     which clipped the action-hand on viewports shorter than ~860px because
+     the 1fr battle-upper ate the available height first. Flipping to
+     "1fr min-content" makes the tray reserve exactly its natural height,
+     and overflow:visible lets the screen grow with content rather than
+     amputating the bottom of the tray. */
+  grid-template-rows: minmax(180px, 1fr) min-content;
+  gap: 14px;
+  overflow: visible;
 }
 
 .turn-phase-banner {
@@ -2731,13 +2944,23 @@ p {
 }
 
 .battle-upper {
-  display: flex;
-  justify-content: space-around;
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(420px, 1.6fr);
   align-items: center;
-  flex-shrink: 0;
-  gap: 16px;
-  flex: 0 0 auto;
-  max-height: 160px;
+  justify-items: center;
+  gap: 32px;
+  min-height: 0;
+  padding: 0 16px;
+}
+
+.battle-upper .player-panel {
+  width: 100%;
+  max-width: 480px;
+  justify-content: flex-start;
+}
+
+.battle-upper .enemy-stage {
+  width: 100%;
 }
 
 .player-panel {
@@ -2768,13 +2991,13 @@ p {
 }
 
 .player-avatar {
-  width: 110px;
-  height: 110px;
-  border-radius: 30px;
+  width: 144px;
+  height: 144px;
+  border-radius: 36px;
   background: linear-gradient(160deg, #1a2644 0%, #111827 100%);
   border: 1px solid rgba(99,102,241,0.22);
   box-shadow: 0 12px 32px rgba(0,0,0,0.55), var(--glow-indigo);
-  font-size: 3rem;
+  font-size: 3.6rem;
   color: var(--ink);
   flex-shrink: 0;
 }
@@ -2955,24 +3178,52 @@ p {
 
 .enemy-stage {
   display: flex;
-  gap: 10px;
+  gap: 18px;
   flex-wrap: nowrap;
   justify-content: center;
   align-items: center;
-  flex: 1;
+  height: 100%;
+  min-height: 0;
 }
 
 .enemy-panel {
   position: relative;
-  min-width: 108px;
-  padding: 18px 12px 10px;
-  border-radius: 24px;
+  min-width: 140px;
+  padding: 22px 16px 14px;
+  border-radius: 26px;
   background: linear-gradient(160deg, #1c1030 0%, #120e20 100%);
   border: 2px solid rgba(244,63,94,0.12);
-  opacity: 0.42;
-  flex: 1;
-  max-width: 180px;
+  opacity: 0.55;
+  flex: 1 1 0;
+  max-width: 240px;
   text-align: center;
+  transition: opacity 200ms ease, transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Solo encounter — let the single enemy command the stage */
+.enemy-stage:has(> .enemy-panel:only-child) .enemy-panel {
+  max-width: 360px;
+  min-width: 240px;
+  padding: 28px 24px 20px;
+  border-radius: 30px;
+}
+
+.enemy-stage:has(> .enemy-panel:only-child) .enemy-avatar {
+  width: 168px;
+  height: 168px;
+  font-size: 4.4rem;
+}
+
+/* Two-enemy duo — slightly more breathing room than 3+ */
+.enemy-stage:has(> .enemy-panel:nth-child(2):last-child) .enemy-panel {
+  max-width: 280px;
+  min-width: 180px;
+}
+
+.enemy-stage:has(> .enemy-panel:nth-child(2):last-child) .enemy-avatar {
+  width: 132px;
+  height: 132px;
+  font-size: 3.6rem;
 }
 
 .enemy-panel.is-targeted {
@@ -3021,10 +3272,10 @@ p {
 }
 
 .enemy-avatar {
-  width: 84px;
-  height: 84px;
-  font-size: 3rem;
-  margin: 4px auto 8px;
+  width: 108px;
+  height: 108px;
+  font-size: 3.4rem;
+  margin: 4px auto 10px;
   display: block;
 }
 
@@ -3047,15 +3298,13 @@ p {
 
 .combat-tray {
   position: relative;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(99, 102, 241, 0.3) transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   background: rgba(14, 20, 36, 0.98);
   border: 1px solid rgba(99, 102, 241, 0.18);
   border-radius: 32px;
-  padding: 10px 14px;
+  padding: 14px 18px 16px;
   box-shadow: 0 24px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
@@ -3367,22 +3616,35 @@ p {
 }
 
 .action-hand {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 12px;
+  /* Flex (not auto-fit grid) so 3 cards don't stretch to 33% of the screen
+     each — they sit centered as a tight unit, with consistent sizing whether
+     the player has 3 cards in hand or 4 (when the ultimate is ready). */
+  display: flex !important;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
+  gap: 14px;
   padding-top: 4px;
+  min-height: 210px;
+  width: 100%;
 }
 
 .combat-card {
   position: relative;
-  width: auto;
-  min-width: 0;
+  flex: 0 0 220px;
+  width: 220px;
+  max-width: 240px;
+  min-width: 180px;
   height: 198px;
   border: 0;
-  border-radius: 32px;
+  border-radius: 28px;
   padding: 16px;
   color: white;
   text-align: left;
+  /* Ensure the card always paints even if its color modifier class fails to
+     attach for some reason — fallback dark gradient keeps the card visible. */
+  background: linear-gradient(180deg, #1f2a4a, #0f1729);
+  display: block;
 }
 
 .combat-card:disabled {
@@ -3398,14 +3660,18 @@ p {
   position: absolute;
   top: 12px;
   right: 12px;
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
   display: grid;
   place-items: center;
-  background: rgba(255,255,255,0.18);
-  font-size: 0.74rem;
+  background: rgba(15, 23, 42, 0.42);
+  border: 1px solid rgba(255,255,255,0.28);
+  color: white;
+  font-size: 1.05rem;
   font-weight: 900;
+  letter-spacing: 0.04em;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.18);
 }
 
 .combat-card-cost {
@@ -3484,24 +3750,29 @@ p {
 }
 
 .problem-text {
-  font-size: clamp(4rem, 10vw, 8rem);
-  line-height: 0.95;
+  /* Was clamp(4rem, 10vw, 8rem) — at 1440px that produced a 144px tall
+     prompt that pushed the answer pills below the viewport. Capped to 5rem
+     so the four answer buttons stay reachable without scrolling. */
+  font-size: clamp(2.5rem, 6vw, 5rem);
+  line-height: 1;
 }
 
 .answer-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin-top: 24px;
+  gap: 12px;
+  margin-top: 18px;
 }
 
 .answer-button {
-  min-height: 120px;
-  border-radius: 34px;
+  /* Was min-height 120px which combined with the oversized prompt overflowed
+     a 900px viewport. 84px is still big-tap friendly for kids. */
+  min-height: 84px;
+  border-radius: 28px;
   border: 2px solid rgba(99,102,241,0.2);
   background: linear-gradient(160deg, #1a2440 0%, #111827 100%);
   font-family: "Arial Black", sans-serif;
-  font-size: clamp(2rem, 5vw, 4rem);
+  font-size: clamp(1.6rem, 3.5vw, 2.6rem);
   color: var(--ink);
   display: flex;
   justify-content: center;
@@ -3691,7 +3962,11 @@ p {
   padding: 24px;
   text-align: center;
   position: relative;
-  overflow: hidden;
+  /* Was overflow: hidden which clipped the run/defeat report stats grids and
+     footer button on shorter viewports. Allow vertical scroll so the player
+     can always reach the Return To Camp button. */
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .victory-modal {
@@ -4035,22 +4310,89 @@ p {
 }
 
 .shop-card-herbs {
-  padding: 8px;
+  padding: 6px;
+  display: grid;
+  place-items: stretch;
+  background:
+    linear-gradient(180deg, rgba(16, 185, 129, 0.10), rgba(245, 158, 11, 0.05)),
+    rgba(16, 185, 129, 0.06);
+  border-color: rgba(16, 185, 129, 0.22);
+}
+
+.shop-card-herbs .shop-herb-stack {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
   justify-content: center;
-}
-
-.shop-herb-stack {
+  gap: 3px;
   margin-top: 0;
-  justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 
-.shop-herb-stack .herb-pill {
+.shop-card-herbs .shop-herb-stack .herb-pill {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  width: 100%;
   min-width: 0;
-  padding: 6px 8px;
-  gap: 6px;
-  font-size: 0.54rem;
+  max-width: 100%;
+  padding: 3px 7px;
+  gap: 5px;
+  border-radius: 8px;
+  font-size: 0.5rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.shop-card-herbs .shop-herb-stack .herb-pill > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  font-size: 0.5rem;
+}
+
+.shop-card-herbs .shop-herb-stack .herb-pill strong {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  letter-spacing: -0.02em;
+  font-weight: 900;
+}
+
+/* If the card lists 4+ herbs, fall back to a tight 2-col grid so nothing clips */
+.shop-card-herbs .shop-herb-stack:has(> .herb-pill:nth-child(4)) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.shop-card-herbs .shop-herb-stack:has(> .herb-pill:nth-child(4)) .herb-pill {
+  padding: 3px 5px;
+  gap: 3px;
+  border-radius: 7px;
+  font-size: 0.44rem;
+}
+
+.shop-card-herbs .shop-herb-stack:has(> .herb-pill:nth-child(4)) .herb-pill > span {
+  font-size: 0.44rem;
+}
+
+.shop-card-herbs .shop-herb-stack:has(> .herb-pill:nth-child(4)) .herb-pill strong {
+  font-size: 0.66rem;
+}
+
+.shop-card.is-disabled .shop-card-visual.shop-card-herbs {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .shop-card-token span {
@@ -4441,58 +4783,98 @@ p {
 .tooltip-anchor::after {
   content: attr(data-tooltip);
   position: absolute;
-  left: 50%;
-  bottom: calc(100% + 10px);
-  transform: translateX(-50%) translateY(6px);
+  /* Anchor to the right edge of the card and push the popup further to the
+     right. This avoids the popup landing on top of the card it's describing
+     and avoids being clipped by the lane scroll container at the top. */
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%) translateX(-6px);
   width: max-content;
-  max-width: min(280px, 70vw);
-  padding: 10px 12px;
+  max-width: min(280px, 38vw);
+  padding: 12px 14px;
   border-radius: 14px;
-  background: rgba(15, 23, 42, 0.96);
-  color: white;
-  font-size: 0.72rem;
-  line-height: 1.35;
-  font-weight: 700;
+  /* Fully opaque, high-contrast background so the tooltip reads as a real
+     overlay card instead of translucent floating text. Indigo accent border
+     ties it to the brand and signals "this is a popup". */
+  background: #0b1120;
+  border: 1px solid rgba(99, 102, 241, 0.55);
+  color: #f1f5f9;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  font-weight: 500;
   letter-spacing: normal;
   text-transform: none;
-  box-shadow: 0 18px 32px rgba(15, 23, 42, 0.26);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.35);
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
-  z-index: 30;
-  white-space: normal;
+  transition: opacity 110ms ease, transform 110ms ease, visibility 110ms ease;
+  z-index: 60;
+  /* Render newlines (encoded as &#10; in data-tooltip) as real line breaks
+     so multi-line tooltip content stacks instead of running together. */
+  white-space: pre-line;
+  text-align: left;
 }
 
 .tooltip-anchor::before {
   content: "";
   position: absolute;
-  left: 50%;
-  bottom: calc(100% + 4px);
-  width: 12px;
-  height: 12px;
-  transform: translateX(-50%) rotate(45deg) translateY(6px);
-  background: rgba(15, 23, 42, 0.96);
+  left: calc(100% + 6px);
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  transform: translateY(-50%) rotate(45deg) translateX(-3px);
+  background: #0b1120;
+  border-left: 1px solid rgba(99, 102, 241, 0.55);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.55);
   opacity: 0;
   visibility: hidden;
-  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
-  z-index: 29;
+  transition: opacity 110ms ease, transform 110ms ease, visibility 110ms ease;
+  z-index: 59;
   pointer-events: none;
 }
 
 .tooltip-anchor:hover::after,
-.tooltip-anchor:focus-visible::after,
 .tooltip-anchor:focus-visible::after {
   opacity: 1;
   visibility: visible;
-  transform: translateX(-50%) translateY(0);
+  transform: translateY(-50%) translateX(0);
 }
 
 .tooltip-anchor:hover::before,
 .tooltip-anchor:focus-visible::before {
   opacity: 1;
   visibility: visible;
-  transform: translateX(-50%) rotate(45deg) translateY(0);
+  transform: translateY(-50%) rotate(45deg) translateX(0);
+}
+
+/* For the rightmost lane the tooltip would clip off-screen if it always
+   pointed right. Flip it to the left side when the data attribute marks the
+   anchor as right-edge. */
+.tooltip-anchor.tooltip-flip-left::after {
+  left: auto;
+  right: calc(100% + 12px);
+  transform: translateY(-50%) translateX(6px);
+}
+
+.tooltip-anchor.tooltip-flip-left::before {
+  left: auto;
+  right: calc(100% + 6px);
+  border-left: none;
+  border-bottom: none;
+  border-right: 1px solid rgba(99, 102, 241, 0.55);
+  border-top: 1px solid rgba(99, 102, 241, 0.55);
+  transform: translateY(-50%) rotate(45deg) translateX(3px);
+}
+
+.tooltip-anchor.tooltip-flip-left:hover::after,
+.tooltip-anchor.tooltip-flip-left:focus-visible::after {
+  transform: translateY(-50%) translateX(0);
+}
+
+.tooltip-anchor.tooltip-flip-left:hover::before,
+.tooltip-anchor.tooltip-flip-left:focus-visible::before {
+  transform: translateY(-50%) rotate(45deg) translateX(0);
 }
 
 .tooltip-anchor:focus-visible {
@@ -4538,7 +4920,10 @@ p {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 12px;
-  overflow: hidden;
+  /* Visible so the side-positioned tooltip on a hovered talent card can
+     escape the modal bounds. The .skill-tree-lanes child has overflow-y:auto
+     to handle internal scroll. */
+  overflow: visible;
 }
 
 .skill-tree-head {
@@ -4579,6 +4964,12 @@ p {
   gap: 12px;
   margin-top: 0;
   min-height: 0;
+  /* Lanes can be tall on a 4-tier tree; let them scroll inside the modal
+     so T4 cards never get clipped by the viewport. */
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 6px;
+  align-items: start;
 }
 
 .skill-lane {
@@ -4592,7 +4983,9 @@ p {
   gap: 12px;
   min-height: 0;
   position: relative;
-  overflow: hidden;
+  /* visible so cards inside the lane are never clipped — scrolling happens
+     on the parent .skill-tree-lanes container. */
+  overflow: visible;
 }
 
 .skill-lane::before {
@@ -4711,6 +5104,72 @@ p {
   text-align: left;
   cursor: pointer;
   transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+/* Compact mode: only the name and a small badge are visible. The full
+   description + stat lines live in the hover tooltip so all four tiers
+   stay visible without scrolling. */
+.skill-node-compact {
+  padding: 10px 12px;
+  gap: 6px;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name level"
+    "badge badge";
+}
+
+.skill-node-compact .skill-node-name-row {
+  grid-area: name;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.skill-node-compact .skill-node-name-row strong {
+  font-size: 0.92rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.skill-node-level-chip {
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.75);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.skill-node-badge {
+  grid-area: badge;
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-style: normal;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.skill-node-badge-available {
+  color: var(--indigo-light);
+}
+
+.skill-node-badge-owned {
+  color: var(--emerald);
+}
+
+.skill-node-badge-locked {
+  color: rgba(148, 163, 184, 0.7);
 }
 
 .skill-node-topline {
@@ -5000,6 +5459,115 @@ p {
   gap: 8px;
 }
 
+.base-achievements-band {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.section-copy-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.base-achievements-tally {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.achievements-grid {
+  display: grid;
+  /* Cap the column max so a single earned honor doesn't balloon to the
+     entire panel width — same auto-fit-stretch bug the action-hand had. */
+  grid-template-columns: repeat(auto-fill, minmax(260px, 320px));
+  justify-content: start;
+  gap: 12px;
+}
+
+.achievement-card {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  transition: border-color 200ms ease, background-color 200ms ease;
+}
+
+.achievement-card.is-earned {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.32);
+}
+
+.achievement-card.is-locked {
+  opacity: 0.78;
+}
+
+.achievement-card-mark {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: var(--muted);
+}
+
+.achievement-card.is-earned .achievement-card-mark {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.45);
+  color: var(--amber);
+}
+
+.achievement-card-body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.achievement-card-body strong {
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+.achievement-card-body p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.achievement-reveal-modal {
+  width: min(720px, 100%);
+  display: grid;
+  gap: 18px;
+  text-align: center;
+}
+
+.achievement-reveal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 320px));
+  justify-content: center;
+  gap: 12px;
+  text-align: left;
+}
+
+.achievement-reveal-card {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
 .draft-header {
   margin-top: 10px;
 }
@@ -5212,6 +5780,21 @@ p {
     border-radius: 18px;
   }
 
+  .shop-card-herbs .shop-herb-stack .herb-pill {
+    padding: 2px 5px;
+    gap: 4px;
+    font-size: 0.44rem;
+    border-radius: 7px;
+  }
+
+  .shop-card-herbs .shop-herb-stack .herb-pill > span {
+    font-size: 0.44rem;
+  }
+
+  .shop-card-herbs .shop-herb-stack .herb-pill strong {
+    font-size: 0.68rem;
+  }
+
   .shop-card-price {
     grid-column: 2;
     justify-items: start;
@@ -5295,6 +5878,74 @@ p {
 
 .gameover-modal {
   max-width: 760px;
+}
+
+.gameover-report-modal {
+  width: min(880px, 100%);
+  max-width: 880px;
+  display: grid;
+  gap: 18px;
+  padding: 32px 36px;
+  text-align: center;
+}
+
+.gameover-meta-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.gameover-meta-card {
+  display: grid;
+  gap: 6px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  background: rgba(244, 63, 94, 0.07);
+  border: 1px solid rgba(244, 63, 94, 0.18);
+}
+
+.gameover-meta-card span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.gameover-meta-card strong {
+  font-size: 1.4rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+
+.gameover-salvage {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  background: rgba(245, 158, 11, 0.06);
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  text-align: left;
+}
+
+.gameover-salvage > span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.gameover-salvage-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gameover-salvage-empty {
+  color: var(--muted);
+  font-size: 0.86rem;
+  margin: 0;
 }
 
 .app-footer {
@@ -5591,6 +6242,1070 @@ p {
     transform: translate(-50%, -50%) scale(1);
   }
 }
+
+/* =========================================================================
+   OBELISK · UI POLISH LAYER
+   Additive entrance animations, focus states, and micro-interactions.
+   Designed to coexist with existing keyframes — does not override them.
+   All motion respects prefers-reduced-motion at the bottom of this block.
+   ========================================================================= */
+
+/* ---------- shared keyframes ---------- */
+
+@keyframes obelisk-modal-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(28px) scale(0.96);
+    filter: blur(6px);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes obelisk-backdrop-fade {
+  0% {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+    -webkit-backdrop-filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+}
+
+@keyframes obelisk-fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes obelisk-card-deal {
+  0% {
+    opacity: 0;
+    transform: translateY(34px) rotate(-6deg) scale(0.92);
+    filter: brightness(0.6);
+  }
+  55% {
+    opacity: 1;
+    filter: brightness(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotate(0deg) scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes obelisk-answer-flick {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes obelisk-star-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4) rotate(-30deg);
+    filter: brightness(2);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.18) rotate(8deg);
+    filter: brightness(1.6);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+    filter: brightness(1);
+  }
+}
+
+@keyframes obelisk-shimmer {
+  0% {
+    background-position: -180% 0;
+  }
+  100% {
+    background-position: 180% 0;
+  }
+}
+
+@keyframes obelisk-active-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 rgba(99, 102, 241, 0.55),
+      0 0 24px rgba(99, 102, 241, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 0 14px rgba(99, 102, 241, 0),
+      0 0 36px rgba(129, 140, 248, 0.55);
+  }
+}
+
+@keyframes obelisk-skill-unlock {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.85);
+    filter: brightness(1);
+  }
+  35% {
+    transform: scale(1.12);
+    box-shadow: 0 0 28px 6px rgba(245, 158, 11, 0.7);
+    filter: brightness(1.6) saturate(1.4);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 18px rgba(245, 158, 11, 0);
+    filter: brightness(1);
+  }
+}
+
+@keyframes obelisk-relic-claim {
+  0% {
+    opacity: 0;
+    transform: scale(0.6) rotate(-6deg);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.06) rotate(2deg);
+    box-shadow: 0 0 38px rgba(245, 158, 11, 0.55);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+    box-shadow: 0 0 22px rgba(245, 158, 11, 0.32);
+  }
+}
+
+@keyframes obelisk-levelup-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4) rotate(-8deg);
+    letter-spacing: 0.6em;
+    filter: brightness(2.2);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.12) rotate(2deg);
+    letter-spacing: 0.18em;
+    filter: brightness(1.4);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+    letter-spacing: 0.22em;
+    filter: brightness(1);
+  }
+}
+
+@keyframes obelisk-feedback-impact {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.4);
+    filter: blur(8px) brightness(2);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.16);
+    filter: blur(0) brightness(1.45);
+  }
+  44% {
+    transform: translate(-50%, -50%) scale(0.98);
+  }
+  100% {
+    opacity: 0.92;
+    transform: translate(-50%, -50%) scale(1);
+    filter: blur(0) brightness(1);
+  }
+}
+
+@keyframes obelisk-screen-shake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  18% { transform: translate3d(-3px, 1px, 0); }
+  32% { transform: translate3d(2px, -2px, 0); }
+  48% { transform: translate3d(-2px, 2px, 0); }
+  66% { transform: translate3d(2px, 0, 0); }
+  82% { transform: translate3d(-1px, -1px, 0); }
+}
+
+@keyframes obelisk-ambient-breath {
+  0%, 100% {
+    filter: brightness(1) saturate(1);
+    transform: translateY(0);
+  }
+  50% {
+    filter: brightness(1.05) saturate(1.06);
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes obelisk-intent-warn {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.45);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(244, 63, 94, 0);
+    transform: scale(1.05);
+  }
+}
+
+@keyframes obelisk-ultimate-ready {
+  0%, 100% {
+    box-shadow:
+      inset 0 0 0 1px rgba(245, 158, 11, 0.55),
+      0 0 18px rgba(245, 158, 11, 0.35);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 1px rgba(252, 211, 77, 0.95),
+      0 0 36px rgba(245, 158, 11, 0.7);
+  }
+}
+
+@keyframes obelisk-meter-fill-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.25) saturate(1.15); }
+}
+
+@keyframes obelisk-target-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(244, 63, 94, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(244, 63, 94, 0);
+  }
+}
+
+@keyframes obelisk-button-shine {
+  0% {
+    transform: translateX(-120%) skewX(-22deg);
+    opacity: 0;
+  }
+  35% {
+    opacity: 0.45;
+  }
+  100% {
+    transform: translateX(220%) skewX(-22deg);
+    opacity: 0;
+  }
+}
+
+@keyframes obelisk-spin-slow {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ---------- modal & backdrop entrances ---------- */
+
+.modal-backdrop {
+  animation: obelisk-backdrop-fade 220ms ease-out both;
+}
+
+.modal-backdrop > .victory-modal,
+.modal-backdrop > .utility-modal,
+.modal-backdrop > .skill-tree-modal,
+.modal-backdrop > .run-report-modal {
+  animation: obelisk-modal-rise 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Stagger headline content inside modals so it reads as a reveal, not a slam */
+.victory-modal .eyebrow,
+.victory-modal h2,
+.victory-modal .victory-subcopy,
+.victory-modal .reward-grid,
+.victory-modal .victory-bonus-row,
+.victory-modal .draft-header,
+.victory-modal .reward-draft-grid,
+.victory-modal .victory-footer {
+  animation: obelisk-fade-up 420ms ease-out both;
+}
+.victory-modal .eyebrow            { animation-delay: 80ms; }
+.victory-modal h2                  { animation-delay: 140ms; }
+.victory-modal .victory-subcopy    { animation-delay: 200ms; }
+.victory-modal .reward-grid        { animation-delay: 260ms; }
+.victory-modal .victory-bonus-row  { animation-delay: 320ms; }
+.victory-modal .draft-header       { animation-delay: 380ms; }
+.victory-modal .reward-draft-grid  { animation-delay: 440ms; }
+.victory-modal .victory-footer     { animation-delay: 540ms; }
+
+.run-report-modal .run-report-head,
+.run-report-modal .run-report-stars,
+.run-report-modal .run-report-grid,
+.run-report-modal .run-report-reasons,
+.run-report-modal .run-report-footer {
+  animation: obelisk-fade-up 420ms ease-out both;
+}
+.run-report-modal .run-report-head    { animation-delay: 60ms; }
+.run-report-modal .run-report-stars   { animation-delay: 220ms; }
+.run-report-modal .run-report-grid    { animation-delay: 380ms; }
+.run-report-modal .run-report-grid.secondary { animation-delay: 460ms; }
+.run-report-modal .run-report-reasons { animation-delay: 540ms; }
+.run-report-modal .run-report-footer  { animation-delay: 700ms; }
+
+/* When the player is interacting WITHIN a modal (e.g., picking a victory
+   reward), main.js sets `.screen-settled` on the app root. We suppress the
+   entry-fade cascade so a click doesn't replay ~1.2s of staggered fades
+   that make the modal feel like it's reloading. */
+.screen-settled .modal-backdrop,
+.screen-settled .modal-backdrop > .victory-modal,
+.screen-settled .modal-backdrop > .utility-modal,
+.screen-settled .modal-backdrop > .skill-tree-modal,
+.screen-settled .modal-backdrop > .run-report-modal,
+.screen-settled .victory-modal .eyebrow,
+.screen-settled .victory-modal h2,
+.screen-settled .victory-modal .victory-subcopy,
+.screen-settled .victory-modal .reward-grid,
+.screen-settled .victory-modal .victory-bonus-row,
+.screen-settled .victory-modal .draft-header,
+.screen-settled .victory-modal .reward-draft-grid,
+.screen-settled .victory-modal .victory-footer,
+.screen-settled .reward-draft-grid .reward-draft-card,
+.screen-settled .run-report-modal .run-report-head,
+.screen-settled .run-report-modal .run-report-stars,
+.screen-settled .run-report-modal .run-report-grid,
+.screen-settled .run-report-modal .run-report-reasons,
+.screen-settled .run-report-modal .run-report-footer,
+.screen-settled .run-report-star,
+.screen-settled .run-report-reason {
+  animation: none;
+}
+/* But keep the active-pulse on the *selected* reward card — it's not an
+   entry animation, it's an ongoing affordance. */
+.screen-settled .reward-draft-card.is-selected {
+  animation: obelisk-active-pulse 1800ms ease-in-out infinite;
+}
+
+/* Continue Ascent: subtle ongoing nudge so the eye lands on the next step
+   after a reward pick. Only kicks in once the modal is settled, so it
+   doesn't fight the entry animation. */
+.screen-settled .continue-ascent-button {
+  animation: obelisk-active-pulse 2200ms ease-in-out infinite;
+  box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.55);
+}
+
+/* ---------- run report stars: pop + earned glow ---------- */
+
+.run-report-star {
+  animation: obelisk-star-pop 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation-delay: calc(280ms + var(--star-index, 0) * 140ms);
+}
+
+.run-report-star.is-earned {
+  position: relative;
+}
+
+.run-report-star.is-earned::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.42), transparent 65%);
+  opacity: 0;
+  animation: obelisk-fade-up 600ms ease-out forwards;
+  animation-delay: calc(560ms + var(--star-index, 0) * 140ms);
+  z-index: -1;
+  filter: blur(4px);
+}
+
+/* ---------- combat hand: deal cards in sequence ---------- */
+
+.action-hand .combat-card {
+  animation: obelisk-card-deal 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--hand-index, 0) * 70ms);
+  transform-origin: 50% 100%;
+}
+
+.combat-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.combat-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 38%;
+  height: 100%;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.18) 50%,
+    transparent 100%
+  );
+  opacity: 0;
+  transform: translateX(-120%) skewX(-22deg);
+  pointer-events: none;
+}
+
+.combat-card:not(.is-disabled):hover::before {
+  animation: obelisk-button-shine 720ms ease-out forwards;
+}
+
+.combat-card:not(.is-disabled):hover {
+  transform: translateY(-4px) scale(1.015);
+  filter: brightness(1.06);
+}
+
+.combat-card:not(.is-disabled):active {
+  transform: translateY(-1px) scale(0.99);
+  transition: transform 80ms ease-out;
+}
+
+/* ---------- problem stage + answer buttons ---------- */
+
+.problem-stage {
+  animation: obelisk-fade-up 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.problem-stage .problem-text {
+  animation: obelisk-fade-up 380ms ease-out both;
+  animation-delay: 80ms;
+}
+
+.answer-grid .answer-button {
+  animation: obelisk-answer-flick 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(140ms + var(--answer-index, 0) * 70ms);
+}
+
+.answer-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.answer-button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(99, 102, 241, 0.22),
+    transparent 55%
+  );
+  opacity: 0;
+  transition: opacity 160ms ease;
+  pointer-events: none;
+}
+
+.answer-button:hover::before {
+  opacity: 1;
+}
+
+.answer-button:not(:disabled):hover {
+  transform: translateY(-2px);
+}
+
+.answer-button:not(:disabled):active {
+  transform: translateY(0) scale(0.985);
+  transition: transform 70ms ease-out;
+}
+
+/* ---------- victory reward draft cards ---------- */
+
+.reward-draft-grid .reward-draft-card {
+  animation: obelisk-card-deal 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(480ms + var(--reward-index, 0) * 90ms);
+  transform-origin: 50% 80%;
+}
+
+.reward-draft-card:not(:disabled):hover {
+  transform: translateY(-3px) scale(1.01);
+}
+
+.reward-draft-card.is-selected {
+  animation: obelisk-active-pulse 1800ms ease-in-out infinite;
+}
+
+/* ---------- run report star reasons stagger ---------- */
+
+.run-report-reason {
+  animation: obelisk-fade-up 420ms ease-out both;
+  animation-delay: calc(560ms + var(--star-index, 0) * 110ms);
+}
+
+/* ---------- skill tree node unlock burst ---------- */
+
+.skill-node-owned,
+.skill-node.is-just-unlocked {
+  position: relative;
+}
+
+.skill-node.is-just-unlocked {
+  animation: obelisk-skill-unlock 620ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Ownership glow (always-on subtle hint that a node was earned).
+   Uses box-shadow instead of ::after — owned skill nodes are also
+   tooltip-anchors, and tooltip-anchor::after carries the tooltip text.
+   Two rules can't share the same pseudo-element, so an ::after glow
+   was hiding the tooltip text on owned nodes (the orphaned arrow ::before
+   then looked like a stray blue outline floating beside the card). */
+.skill-node-owned {
+  box-shadow:
+    inset 0 0 0 1px rgba(245, 158, 11, 0.18),
+    0 0 18px -4px rgba(245, 158, 11, 0.30);
+}
+
+.skill-node {
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 160ms ease,
+    box-shadow 200ms ease,
+    background-color 160ms ease;
+}
+
+.skill-node:not(.skill-node-locked):hover {
+  transform: translateY(-2px) scale(1.015);
+}
+
+.skill-node-available {
+  animation: obelisk-active-pulse 2400ms ease-in-out infinite;
+}
+
+/* ---------- relic reward acquire glow ---------- */
+
+.reward-relic,
+.relic-reward-card {
+  animation: obelisk-relic-claim 560ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation-delay: 380ms;
+  position: relative;
+}
+
+.reward-relic::before,
+.relic-reward-card::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    120deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.12) 50%,
+    transparent 70%
+  );
+  background-size: 280% 100%;
+  background-position: -180% 0;
+  opacity: 0.7;
+  animation: obelisk-shimmer 3200ms ease-in-out infinite;
+}
+
+/* ---------- level up banner celebration ---------- */
+
+.levelup-banner {
+  animation: obelisk-levelup-pop 720ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation-delay: 220ms;
+  position: relative;
+  overflow: hidden;
+  background-image: linear-gradient(
+    100deg,
+    rgba(245, 158, 11, 0.2) 0%,
+    rgba(252, 211, 77, 0.55) 50%,
+    rgba(245, 158, 11, 0.2) 100%
+  );
+  background-size: 220% 100%;
+}
+
+.levelup-banner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.35) 50%,
+    transparent 70%
+  );
+  background-size: 240% 100%;
+  background-position: -180% 0;
+  animation: obelisk-shimmer 2400ms ease-in-out infinite;
+  animation-delay: 900ms;
+  pointer-events: none;
+}
+
+/* ---------- feedback burst with subtle screen shake on critical ---------- */
+
+.feedback-burst {
+  animation: obelisk-feedback-impact 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.feedback-burst.critical {
+  animation:
+    obelisk-feedback-impact 520ms cubic-bezier(0.22, 1, 0.36, 1) both,
+    obelisk-screen-shake 380ms ease-in-out 60ms;
+  text-shadow:
+    0 0 12px rgba(245, 158, 11, 0.8),
+    0 0 32px rgba(244, 63, 94, 0.55);
+}
+
+/* ---------- enemy attack telegraph ---------- */
+
+.enemy-panel.is-targeted {
+  animation: obelisk-target-ring 1200ms ease-out infinite;
+}
+
+.battle-screen.is-enemy-phase .enemy-intent-pill {
+  animation: obelisk-intent-warn 900ms ease-in-out infinite;
+}
+
+.enemy-panel {
+  transition:
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 160ms ease,
+    box-shadow 200ms ease,
+    filter 200ms ease;
+}
+
+.enemy-panel:not(:disabled):hover {
+  transform: translateY(-2px);
+  filter: brightness(1.06) saturate(1.08);
+}
+
+/* ---------- ultimate meter ready glow ---------- */
+
+.ultimate-cluster:not(.is-locked) .ultimate-meter {
+  position: relative;
+  overflow: hidden;
+}
+
+.ultimate-cluster:not(.is-locked) .ultimate-meter > i {
+  background-image: linear-gradient(
+    100deg,
+    var(--amber) 0%,
+    #fcd34d 50%,
+    var(--amber) 100%
+  );
+  background-size: 220% 100%;
+  animation: obelisk-shimmer 2600ms ease-in-out infinite;
+  transition: width 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ultimate-cluster:not(.is-locked) strong {
+  transition: color 200ms ease, text-shadow 200ms ease;
+}
+
+/* When ultimate is ready, surrounding cluster gets a soft pulse */
+.ultimate-cluster:has(strong:not(:empty))[title*="ultimate"] strong {
+  /* progressive enhancement only — :has fallback ignored on old browsers */
+}
+
+/* Health/energy meters: animated fill and gentle highlight */
+.meter > i,
+.enemy-meter > i {
+  transition: width 360ms cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.meter > i::after,
+.enemy-meter > i::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.18) 50%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  background-position: -180% 0;
+  animation: obelisk-shimmer 3200ms ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Energy pips: pop in when filled */
+.energy-pip {
+  transition:
+    background-color 220ms ease,
+    box-shadow 220ms ease,
+    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.energy-pip.is-filled {
+  transform: scale(1.06);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.55);
+}
+
+/* ---------- map: active node breathing pulse ---------- */
+
+[data-active-node="true"] {
+  animation: obelisk-active-pulse 2000ms ease-in-out infinite;
+}
+
+.map-node {
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 220ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+.map-node:not(:disabled):not(.is-locked):not(.is-future):hover {
+  transform: translateY(-3px) scale(1.03);
+}
+
+/* ---------- battle screen + enemy stage entrance ---------- */
+
+.battle-screen {
+  animation: obelisk-fade-up 320ms ease-out both;
+}
+
+.enemy-stage .enemy-panel {
+  animation: obelisk-fade-up 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 60ms;
+}
+
+.player-panel {
+  animation: obelisk-fade-up 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 40ms;
+}
+
+.battle-popups,
+.battle-effects {
+  /* never animate transitionally — these contain transient effects */
+  animation: none !important;
+}
+
+/* ---------- landing stage: ambient breathing + button glow ---------- */
+
+.landing-stage {
+  animation: obelisk-fade-up 420ms ease-out both;
+}
+
+.landing-button {
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 240ms ease,
+    filter 200ms ease;
+}
+
+.landing-button::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 32%;
+  height: 100%;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.22) 50%,
+    transparent 100%
+  );
+  transform: translateX(-160%) skewX(-22deg);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.landing-button:hover::before {
+  animation: obelisk-button-shine 820ms ease-out forwards;
+}
+
+.landing-button:hover {
+  transform: translateY(-3px);
+  filter: brightness(1.08);
+}
+
+/* ---------- legend / spire selection card flourish ---------- */
+
+.legend-select-card,
+.spire-select-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.legend-select-card::after,
+.spire-select-card::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    120deg,
+    transparent 30%,
+    rgba(99, 102, 241, 0.18) 50%,
+    transparent 70%
+  );
+  background-size: 280% 100%;
+  background-position: -180% 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease;
+}
+
+.legend-select-card:hover::after,
+.spire-select-card:hover::after,
+.legend-select-card.is-selected::after,
+.spire-select-card.is-selected::after {
+  opacity: 1;
+  animation: obelisk-shimmer 2800ms ease-in-out infinite;
+}
+
+.legend-select-card.is-selected,
+.spire-select-card.is-selected {
+  animation: obelisk-active-pulse 2400ms ease-in-out infinite;
+}
+
+/* ---------- header pills: subtle update shimmer when changed ---------- */
+
+.header-pill {
+  position: relative;
+  overflow: hidden;
+  transition: border-color 200ms ease, box-shadow 200ms ease, color 160ms ease;
+}
+
+.header-pill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.08) 50%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  background-position: -180% 0;
+  animation: obelisk-shimmer 6000ms ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* ---------- header buttons: refined active/focus feedback ---------- */
+
+.header-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.header-button.primary::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 36%;
+  height: 100%;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.22) 50%,
+    transparent 100%
+  );
+  transform: translateX(-140%) skewX(-22deg);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.header-button.primary:not(:disabled):hover::after {
+  animation: obelisk-button-shine 720ms ease-out forwards;
+}
+
+.header-button:focus-visible {
+  outline: 2px solid var(--indigo-light);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px rgba(129, 140, 248, 0.25);
+}
+
+/* ---------- potion slots: hover lift + subtle pulse on full slot ---------- */
+
+.potion-slot {
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 220ms ease,
+    border-color 180ms ease;
+}
+
+.potion-slot:not(.is-empty):not(:disabled):hover {
+  transform: translateY(-3px) scale(1.03);
+}
+
+.potion-slot:not(.is-empty)::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.18), transparent 65%);
+  opacity: 0.65;
+  z-index: -1;
+  filter: blur(2px);
+}
+
+/* ---------- utility (rest/shop/event/treasure) cards ---------- */
+
+.utility-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.utility-card:not(.is-disabled):not(:disabled):hover {
+  transform: translateY(-3px) scale(1.01);
+}
+
+.utility-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 32%;
+  height: 100%;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.16) 50%,
+    transparent 100%
+  );
+  transform: translateX(-140%) skewX(-22deg);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.utility-card:not(.is-disabled):not(:disabled):hover::before {
+  animation: obelisk-button-shine 760ms ease-out forwards;
+}
+
+/* ---------- avatars: faint idle breath in non-combat contexts ---------- */
+
+.legend-select-avatar,
+.player-avatar {
+  animation: obelisk-ambient-breath 5400ms ease-in-out infinite;
+}
+
+/* ---------- damage popup: tiny rotation jitter for life ---------- */
+
+.damage-popup.crit,
+.damage-popup.crit-bonus,
+.damage-popup.crit-bonus-total {
+  text-shadow:
+    0 0 12px rgba(245, 158, 11, 0.85),
+    0 0 24px rgba(252, 211, 77, 0.55);
+  font-weight: 900;
+}
+
+.damage-popup.crit::before,
+.damage-popup.crit-bonus::before {
+  content: "";
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.4), transparent 65%);
+  z-index: -1;
+  filter: blur(6px);
+  pointer-events: none;
+}
+
+/* ---------- subtle CRT-ish vignette pulse on battle background ---------- */
+
+.battle-screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 55%,
+    rgba(0, 0, 0, 0.45) 100%
+  );
+  opacity: 0.6;
+  animation: obelisk-ambient-breath 7200ms ease-in-out infinite;
+  z-index: 0;
+}
+
+/* Direct children of .battle-screen sit above the gradient backdrop, but
+   .battle-popups and .battle-effects must remain absolutely positioned —
+   otherwise they become grid items and steal vertical space, which clipped
+   the action-hand below the viewport. */
+.battle-screen > *:not(.battle-popups):not(.battle-effects):not(.turn-phase-banner):not(.feedback-burst) {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---------- focus: keyboard-friendly visible focus on any interactive ---------- */
+
+.combat-card:focus-visible,
+.answer-button:focus-visible,
+.reward-draft-card:focus-visible,
+.utility-card:focus-visible,
+.skill-node:focus-visible,
+.enemy-panel:focus-visible,
+.map-node:focus-visible,
+.potion-slot:focus-visible,
+.legend-select-card:focus-visible,
+.spire-select-card:focus-visible,
+.landing-button:focus-visible {
+  outline: 2px solid var(--indigo-light);
+  outline-offset: 3px;
+  box-shadow:
+    0 0 0 4px rgba(129, 140, 248, 0.25),
+    0 0 24px rgba(99, 102, 241, 0.35);
+}
+
+/* ---------- reduced motion: honor user preference ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 60ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .modal-backdrop,
+  .modal-backdrop > * {
+    animation: none !important;
+  }
+
+  .run-report-star,
+  .run-report-reason,
+  .reward-draft-card,
+  .combat-card,
+  .answer-button {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  /* Keep meaningful state pulses but slow them down so they're not disruptive */
+  .skill-node-available,
+  .reward-draft-card.is-selected,
+  [data-active-node="true"],
+  .legend-select-card.is-selected,
+  .spire-select-card.is-selected {
+    animation: none !important;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.55), 0 0 20px rgba(99, 102, 241, 0.35) !important;
+  }
+}
+
+/* =========================================================================
+   END OBELISK · UI POLISH LAYER
+   ========================================================================= */
 
 @media (max-width: 1100px) {
   .base-grid {
