@@ -2902,3 +2902,179 @@ export const SCREEN = {
   RUN_REPORT: "RUN_REPORT",
   GAMEOVER: "GAMEOVER",
 };
+
+// --- Keyword glossary -----------------------------------------------------
+//
+// Hearthstone-style canonical keywords. Every engine effect that is exposed
+// in skill-tree, relic, action, or ultimate descriptions has exactly one
+// keyword. The keyword chip + glossary line replaces inline mechanical
+// prose, so descriptions can stay short and flavored while the rules live
+// in a single source of truth.
+//
+// Names are kept short (1-2 words) and evocative. When adding a new engine
+// effect, add a keyword for it here AND wire EFFECT_TO_KEYWORD below.
+//
+// Format helpers:
+//   - `pct` formats a 0..1 decimal as "+12%" (e.g. firstAttackPower: 0.12)
+//   - `flat` formats an integer as "+3" (e.g. blockOnCorrect: 3)
+//   - `flatNeg` formats a negative integer as "-2" (e.g. ultimateThresholdDelta: -2)
+//   - `boolean` for toggle effects (no number to display)
+
+export const KEYWORD_FORMATS = {
+  pct: (value) => `+${Math.round(value * 100)}%`,
+  flat: (value) => `+${Math.round(value)}`,
+  flatNeg: (value) => `${value > 0 ? "+" : ""}${Math.round(value)}`,
+  boolean: () => "",
+};
+
+export const KEYWORDS = {
+  OPENING_STRIKE: {
+    id: "OPENING_STRIKE",
+    name: "Opening Strike",
+    definition: "Your first attack each turn lands harder.",
+  },
+  QUICK_CRIT: {
+    id: "QUICK_CRIT",
+    name: "Quick Crit",
+    definition: "Answer inside the quick window for bonus crit chance.",
+  },
+  WARD: {
+    id: "WARD",
+    name: "Ward",
+    definition: "Gain barrier on every correct answer.",
+  },
+  BULWARK: {
+    id: "BULWARK",
+    name: "Bulwark",
+    definition: "Bonus power to all defensive (Guard) actions.",
+  },
+  KEEN: {
+    id: "KEEN",
+    name: "Keen",
+    definition: "Critical hits land harder.",
+  },
+  ARC: {
+    id: "ARC",
+    name: "Arc",
+    definition: "Crits chip damage to other enemies.",
+  },
+  ECHO: {
+    id: "ECHO",
+    name: "Echo",
+    definition: "First crit each turn returns energy.",
+  },
+  SPELL_ECHO: {
+    id: "SPELL_ECHO",
+    name: "Spell Echo",
+    definition: "First HARD-spell crit each turn returns energy.",
+  },
+  CRESCENDO: {
+    id: "CRESCENDO",
+    name: "Crescendo",
+    definition: "Bonus damage per combo stack.",
+  },
+  HOLDFAST: {
+    id: "HOLDFAST",
+    name: "Holdfast",
+    definition: "Combo cannot drop below this floor inside an act.",
+  },
+  DRAIN: {
+    id: "DRAIN",
+    name: "Drain",
+    definition: "Long combos heal you on every clean hit.",
+  },
+  STEADY: {
+    id: "STEADY",
+    name: "Steady",
+    definition: "A miss halves combo instead of resetting it.",
+  },
+  REBOUND: {
+    id: "REBOUND",
+    name: "Rebound",
+    definition: "The action after a miss costs no energy.",
+  },
+  TEMPO: {
+    id: "TEMPO",
+    name: "Tempo",
+    definition: "Your first action each turn costs less energy.",
+  },
+  HARD_POWER: {
+    id: "HARD_POWER",
+    name: "Hard Power",
+    definition: "HARD-difficulty actions hit harder.",
+  },
+  CHANNEL: {
+    id: "CHANNEL",
+    name: "Channel",
+    definition: "A quick HARD correct refunds energy.",
+  },
+  RESERVE: {
+    id: "RESERVE",
+    name: "Reserve",
+    definition: "Gain bonus energy at the start of every turn.",
+  },
+  APEX: {
+    id: "APEX",
+    name: "Apex",
+    definition: "Bonus damage to your ultimate.",
+  },
+  PRIME: {
+    id: "PRIME",
+    name: "Prime",
+    definition: "Your ultimate readies sooner.",
+  },
+  MEND: {
+    id: "MEND",
+    name: "Mend",
+    definition: "Bonus to healing effects.",
+  },
+  TONIC: {
+    id: "TONIC",
+    name: "Tonic",
+    definition: "Bonus to potion healing.",
+  },
+  FOCUS: {
+    id: "FOCUS",
+    name: "Focus",
+    definition: "Focus stat contributes more to crit damage.",
+  },
+  REFORGE: {
+    id: "REFORGE",
+    name: "Reforge",
+    definition: "Replaces a base action with a new variant.",
+  },
+};
+
+// EFFECT_TO_KEYWORD wires each engine effect key to its keyword + value
+// formatting rule. formatSkillEffect (ui.js) consumes this map to build
+// chip objects: { keyword, valueLabel, definition }.
+//
+// Some keyword entries also carry a `levelScales` flag when the value
+// scales with the node's purchased level (most numerical effects do;
+// boolean toggles don't).
+
+export const EFFECT_TO_KEYWORD = {
+  firstAttackPower:        { keywordId: "OPENING_STRIKE", format: "pct",     levelScales: true  },
+  quickCritChance:         { keywordId: "QUICK_CRIT",     format: "flat",    levelScales: true  },
+  blockOnCorrect:          { keywordId: "WARD",           format: "flat",    levelScales: true  },
+  guardPower:              { keywordId: "BULWARK",        format: "pct",     levelScales: true  },
+  critPowerBonus:          { keywordId: "KEEN",           format: "pct",     levelScales: true  },
+  critSplash:              { keywordId: "ARC",            format: "pct",     levelScales: true  },
+  critEnergyRefund:        { keywordId: "ECHO",           format: "flat",    levelScales: true  },
+  spellEnergyRefundOnCrit: { keywordId: "SPELL_ECHO",     format: "flat",    levelScales: true  },
+  comboPowerPerStackBonus: { keywordId: "CRESCENDO",      format: "pct",     levelScales: true  },
+  comboFloorOnAct:         { keywordId: "HOLDFAST",       format: "flat",    levelScales: false },
+  comboHealOnHit:          { keywordId: "DRAIN",          format: "flat",    levelScales: true  },
+  softComboBreak:          { keywordId: "STEADY",         format: "boolean", levelScales: false },
+  nextActionFreeAfterMiss: { keywordId: "REBOUND",        format: "boolean", levelScales: false },
+  firstActionDiscount:     { keywordId: "TEMPO",          format: "flat",    levelScales: false },
+  hardActionPower:         { keywordId: "HARD_POWER",     format: "pct",     levelScales: true  },
+  bonusEnergyOnHardCorrect:{ keywordId: "CHANNEL",        format: "flat",    levelScales: false },
+  bonusEnergyPerTurn:      { keywordId: "RESERVE",        format: "flat",    levelScales: false },
+  ultimatePowerBonus:      { keywordId: "APEX",           format: "pct",     levelScales: true  },
+  ultimateThresholdDelta:  { keywordId: "PRIME",          format: "flatNeg", levelScales: false },
+  restorationHealPower:    { keywordId: "MEND",           format: "pct",     levelScales: true  },
+  potionHealPower:         { keywordId: "TONIC",          format: "pct",     levelScales: true  },
+  focusCritBoost:          { keywordId: "FOCUS",          format: "pct",     levelScales: true  },
+  techniqueId:             { keywordId: "REFORGE",        format: "boolean", levelScales: false },
+};

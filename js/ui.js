@@ -1,4 +1,20 @@
-import { ACT_TIME_LIMITS, CLIMB_TIERS, DEFAULT_TIER_ID, HERBS, LEGENDS, MAP_HEIGHT, MATERIALS, NODE_ASSETS, NODE_ICONS, POTIONS, SCREEN, SPIRES } from "./data.js";
+import {
+  ACT_TIME_LIMITS,
+  CLIMB_TIERS,
+  DEFAULT_TIER_ID,
+  EFFECT_TO_KEYWORD,
+  HERBS,
+  KEYWORD_FORMATS,
+  KEYWORDS,
+  LEGENDS,
+  MAP_HEIGHT,
+  MATERIALS,
+  NODE_ASSETS,
+  NODE_ICONS,
+  POTIONS,
+  SCREEN,
+  SPIRES,
+} from "./data.js";
 import {
   canAffordAction,
   getBattleBuffSummary,
@@ -1258,106 +1274,214 @@ const TECHNIQUE_LABELS = {
   "rogue-fan-of-knives":     "Sunder Wave → Fan of Knives (full-field ricochet)",
 };
 
+// Skill node level scales the numeric value of most effects.
+// L1 = 1.0x, L2 = 1.2x, L3 = 1.4x.
+const SKILL_LEVEL_MULTIPLIERS = [0, 1, 1.2, 1.4];
+
+function getSkillLevelMultiplier(level = 1) {
+  const clamped = Math.max(1, Math.min(3, level));
+  return SKILL_LEVEL_MULTIPLIERS[clamped] ?? 1;
+}
+
+// formatSkillEffect now returns an array of chip objects:
+//   { keywordId, name, definition, valueLabel, isReforge }
+// Each chip pairs a keyword (canonical name + universal definition) with
+// its value at the node's current level. The renderer composes chips into
+// the visual chip + glossary block.
+//
+// REFORGE chips carry a custom valueLabel (the technique name) since
+// "Reforges Strike → Arc Lash" is more useful than just "Reforge".
 function formatSkillEffect(effect = {}, level = 1) {
-  const MULT = [0, 1, 1.2, 1.4];
-  const mult = MULT[Math.max(1, Math.min(3, level))] ?? 1;
-  const sc = (v) => Math.round(v * mult * 100) / 100;
-  const lines = [];
-  if (effect.techniqueId)           lines.push(TECHNIQUE_LABELS[effect.techniqueId] || `Unlocks ${effect.techniqueId}`);
-  if (effect.firstAttackPower)      lines.push(`+${Math.round(sc(effect.firstAttackPower) * 100)}% first-attack damage`);
-  if (effect.blockOnCorrect)        lines.push(`+${Math.round(sc(effect.blockOnCorrect))} barrier per correct answer`);
-  if (effect.guardPower)            lines.push(`+${Math.round(sc(effect.guardPower) * 100)}% guard & block power`);
-  if (effect.critPowerBonus)        lines.push(`+${Math.round(sc(effect.critPowerBonus) * 100)}% crit damage`);
-  if (effect.quickCritChance)       lines.push(`+${Math.round(sc(effect.quickCritChance))}% crit chance on fast answers`);
-  if (effect.critSplash)            lines.push(`+${Math.round(sc(effect.critSplash) * 100)}% crit AOE splash`);
-  if (effect.critEnergyRefund)      lines.push(`Crit refunds ${Math.round(sc(effect.critEnergyRefund))} energy (once/turn)`);
-  if (effect.spellEnergyRefundOnCrit) lines.push(`First HARD crit refunds ${Math.round(sc(effect.spellEnergyRefundOnCrit))} energy/turn`);
-  if (effect.comboPowerPerStackBonus) lines.push(`+${Math.round(sc(effect.comboPowerPerStackBonus) * 100)}% damage per combo stack`);
-  if (effect.softComboBreak)        lines.push(`Miss halves combo instead of full reset`);
-  if (effect.firstActionDiscount)   lines.push(`First action costs ${Math.round(sc(effect.firstActionDiscount))} less energy`);
-  if (effect.hardActionPower)       lines.push(`+${Math.round(sc(effect.hardActionPower) * 100)}% HARD action power`);
-  if (effect.bonusEnergyPerTurn)    lines.push(`+${Math.round(sc(effect.bonusEnergyPerTurn))} energy per turn`);
-  if (effect.ultimatePowerBonus)    lines.push(`+${Math.round(sc(effect.ultimatePowerBonus) * 100)}% ultimate power`);
-  if (effect.ultimateThresholdDelta) lines.push(`${effect.ultimateThresholdDelta > 0 ? "+" : ""}${effect.ultimateThresholdDelta} ultimate charge required`);
-  if (effect.restorationHealPower)  lines.push(`+${Math.round(sc(effect.restorationHealPower) * 100)}% heal power`);
-  if (effect.potionHealPower)       lines.push(`+${Math.round(sc(effect.potionHealPower) * 100)}% potion heal power`);
-  if (effect.focusCritBoost)        lines.push(`+${Math.round(sc(effect.focusCritBoost) * 100)}% crit multiplier`);
-  return lines;
+  const mult = getSkillLevelMultiplier(level);
+  const chips = [];
+  for (const [effectKey, value] of Object.entries(effect)) {
+    if (value === false || value === 0 || value === null || value === undefined) continue;
+    const mapping = EFFECT_TO_KEYWORD[effectKey];
+    if (!mapping) continue;
+    const keyword = KEYWORDS[mapping.keywordId];
+    if (!keyword) continue;
+    let valueLabel = "";
+    if (mapping.format === "boolean") {
+      valueLabel = "";
+    } else {
+      const formatter = KEYWORD_FORMATS[mapping.format] || ((v) => `${v}`);
+      const scaled = mapping.levelScales ? value * mult : value;
+      const rounded = mapping.format === "pct"
+        ? Math.round(scaled * 100) / 100
+        : Math.round(scaled);
+      valueLabel = formatter(rounded);
+    }
+    const chip = {
+      keywordId: keyword.id,
+      name: keyword.name,
+      definition: keyword.definition,
+      valueLabel,
+      isReforge: keyword.id === "REFORGE",
+    };
+    // Reforge chips show "Reforges X → Y" as the value, using the
+    // existing TECHNIQUE_LABELS table for the destination action.
+    if (chip.isReforge && typeof value === "string") {
+      chip.valueLabel = TECHNIQUE_LABELS[value] || `Unlocks ${value}`;
+    }
+    chips.push(chip);
+  }
+  return chips;
+}
+
+// Find a node anywhere in the tree by id. Used by the right-rail detail
+// pane to look up the currently-selected node across all lanes.
+function findSkillNodeInTree(tree, nodeId) {
+  if (!nodeId) return null;
+  for (const lane of tree.lanes) {
+    const found = lane.nodes.find((node) => node.id === nodeId);
+    if (found) return { node: found, lane };
+  }
+  return null;
+}
+
+// Right-rail detail pane. Shows the focused skill node's flavor, keyword
+// chips with universal definitions (Hearthstone pattern), prerequisites,
+// level info, and a Learn button. Replaces the unreliable hover-tooltip
+// read-it path. Click any node card to focus it here.
+function renderSkillTreeDetail(tree, selection) {
+  if (!selection) {
+    return `
+      <aside class="skill-tree-detail skill-tree-detail-empty">
+        <p class="eyebrow">Detail</p>
+        <p class="utility-copy">Click a node to inspect it. The Learn button appears here when a node is available and you have points to spend.</p>
+      </aside>
+    `;
+  }
+  const { node, lane } = selection;
+  const chips = formatSkillEffect(node.effect || {}, node.level || 1);
+  const isMaxed = node.status === "owned" && !node.isUpgradeable;
+  const canAct = (node.status === "available" || node.isUpgradeable) && tree.points > 0;
+  const learnLabel = isMaxed
+    ? "Maxed"
+    : node.isUpgradeable
+      ? `Upgrade to L${(node.level || 0) + 1}`
+      : node.status === "available"
+        ? `Learn (1 point)`
+        : "Locked";
+  // Resolve prerequisite labels for the rail's "Requires" line.
+  const prereqLabels = (node.requires || []).map((reqId) => {
+    for (const candidateLane of tree.lanes) {
+      const found = candidateLane.nodes.find((n) => n.id === reqId);
+      if (found) return found.label;
+    }
+    return reqId;
+  });
+  const chipsHtml = chips.length
+    ? chips.map((chip) => {
+        const valueHtml = chip.valueLabel
+          ? `<span class="skill-chip-value">${escapeAttr(chip.valueLabel)}</span>`
+          : "";
+        return `
+          <div class="skill-chip skill-chip-${chip.isReforge ? "reforge" : "passive"}">
+            <span class="skill-chip-name">${escapeAttr(chip.isReforge ? "Reforge" : chip.name)}</span>
+            ${valueHtml}
+          </div>
+        `;
+      }).join("")
+    : `<p class="skill-chip-empty">No mechanical effect.</p>`;
+  const glossaryHtml = chips.length
+    ? `
+      <div class="skill-glossary">
+        ${chips.map((chip) => `
+          <p class="skill-glossary-line">
+            <strong>${escapeAttr(chip.isReforge ? "Reforge" : chip.name)}</strong>
+            <span> — ${escapeAttr(chip.isReforge ? "Replaces a base action with a new variant." : chip.definition)}</span>
+          </p>
+        `).join("")}
+      </div>
+    `
+    : "";
+  const prereqHtml = prereqLabels.length
+    ? `
+      <div class="skill-detail-prereqs">
+        <p class="eyebrow">Requires</p>
+        <ul>${prereqLabels.map((label) => `<li>${escapeAttr(label)}</li>`).join("")}</ul>
+      </div>
+    `
+    : "";
+  return `
+    <aside class="skill-tree-detail">
+      <header class="skill-detail-head">
+        <p class="eyebrow">${escapeAttr(lane.name)} · Tier ${node.tier}</p>
+        <h3>${escapeAttr(node.label)}</h3>
+        ${node.maxLevel > 1 ? `<p class="skill-detail-level">Level ${node.level || 0} / ${node.maxLevel}</p>` : ""}
+      </header>
+      <p class="skill-detail-description">${escapeAttr(node.description || "")}</p>
+      <div class="skill-detail-chips">${chipsHtml}</div>
+      ${glossaryHtml}
+      ${prereqHtml}
+      <button
+        class="header-button primary skill-detail-learn"
+        data-action="unlock-skill-node"
+        data-skill-node-id="${node.id}"
+        ${canAct ? "" : "disabled"}
+      >${escapeAttr(learnLabel)}</button>
+    </aside>
+  `;
 }
 
 function renderSkillTree(run) {
   const tree = getSkillTreeState(run.player);
+  const selection = findSkillNodeInTree(tree, run.selectedSkillNodeId);
   return `
     <section class="modal-backdrop">
-      <div class="utility-modal skill-tree-modal">
+      <div class="utility-modal skill-tree-modal skill-tree-modal-split">
         <div class="skill-tree-head">
           <div>
             <p class="eyebrow">Run Skill Tree</p>
             <h2>${tree.title}</h2>
-            <p class="utility-copy">Spend points to shape this climb. Follow each lane downward and commit to a clear build.</p>
+            <p class="utility-copy">Click a node to inspect it. Spend points from the detail panel to shape this climb.</p>
           </div>
           <div class="skill-tree-points">
             <span>Points</span>
             <strong>${tree.points}</strong>
           </div>
         </div>
-        <div class="skill-tree-lanes">
-          ${tree.lanes.map((lane, laneIndex) => `
-            <div class="skill-lane" data-skill-lane="${lane.id}">
-              <div class="skill-lane-head">
-                <p class="eyebrow">${lane.name}</p>
-                <span>${lane.theme}</span>
-              </div>
-              <div class="skill-lane-track">
-                ${lane.nodes.map((node, index) => {
-                  // Last (rightmost) lane gets the tooltip flipped to the
-                  // left so it doesn't clip off the right edge of the modal.
-                  const tooltipFlipClass = laneIndex === tree.lanes.length - 1 ? "tooltip-flip-left" : "";
-                  const statLines = formatSkillEffect(node.effect || {}, node.level || 1);
-                  const canAct = (node.status === "available" || node.isUpgradeable) && tree.points > 0;
-                  const isMaxed = node.status === "owned" && !node.isUpgradeable;
-                  const badgeLabel = isMaxed ? "Maxed" : node.isUpgradeable ? `Upgrade → L${(node.level || 0) + 1}` : node.status === "available" ? "Learn" : "Locked";
-                  // Tooltip carries the description + stat tags + level info so
-                  // the compact card body only has to show the name. Use a
-                  // single delimited string because the tooltip-anchor element
-                  // renders the data-tooltip attribute as plain text.
-                  // Tooltip text uses real newlines so the hover bubble can
-                  // render description, effect list, and level info on
-                  // separate lines via `white-space: pre-line` in CSS.
-                  const tooltipParts = [
-                    node.description,
-                    statLines.length ? `Effect: ${statLines.join(" • ")}` : null,
-                    node.maxLevel > 1 ? `Level ${node.level || 0}/${node.maxLevel}` : null,
-                  ].filter(Boolean);
-                  const nodeTooltip = `${node.label}\n${tooltipParts.join("\n")}`;
-                  const levelChip = node.maxLevel > 1
-                    ? `<span class="skill-node-level-chip">L${node.level || 0}/${node.maxLevel}</span>`
-                    : "";
-                  return `
-                  <div class="skill-node-step ${index === lane.nodes.length - 1 ? "is-last" : ""}">
-                    <div class="skill-node-spine" aria-hidden="true">
-                      <span class="skill-node-orb skill-node-orb-${isMaxed ? "owned" : node.status}">${node.tier}</span>
-                      ${index === lane.nodes.length - 1 ? "" : `<span class="skill-node-link"></span>`}
-                    </div>
-                    <button
-                      class="skill-node skill-node-compact skill-node-${isMaxed ? "owned" : node.status} tooltip-anchor ${tooltipFlipClass}"
-                      data-action="unlock-skill-node"
-                      data-skill-node-id="${node.id}"
-                      title="${escapeAttr(nodeTooltip)}"
-                      ${tooltipAttr(nodeTooltip)}
-                      ${canAct ? "" : "disabled"}
-                    >
-                      <div class="skill-node-name-row">
-                        <strong>${node.label}</strong>
-                        ${levelChip}
+        <div class="skill-tree-body">
+          <div class="skill-tree-lanes">
+            ${tree.lanes.map((lane) => `
+              <div class="skill-lane" data-skill-lane="${lane.id}">
+                <div class="skill-lane-head">
+                  <p class="eyebrow">${lane.name}</p>
+                  <span>${lane.theme}</span>
+                </div>
+                <div class="skill-lane-track">
+                  ${lane.nodes.map((node, index) => {
+                    const isMaxed = node.status === "owned" && !node.isUpgradeable;
+                    const badgeLabel = isMaxed ? "Maxed" : node.isUpgradeable ? `Upgrade → L${(node.level || 0) + 1}` : node.status === "available" ? "Learn" : "Locked";
+                    const isSelected = node.id === run.selectedSkillNodeId;
+                    const levelChip = node.maxLevel > 1
+                      ? `<span class="skill-node-level-chip">L${node.level || 0}/${node.maxLevel}</span>`
+                      : "";
+                    return `
+                    <div class="skill-node-step ${index === lane.nodes.length - 1 ? "is-last" : ""}">
+                      <div class="skill-node-spine" aria-hidden="true">
+                        <span class="skill-node-orb skill-node-orb-${isMaxed ? "owned" : node.status}">${node.tier}</span>
+                        ${index === lane.nodes.length - 1 ? "" : `<span class="skill-node-link"></span>`}
                       </div>
-                      <em class="skill-node-badge skill-node-badge-${isMaxed ? "owned" : node.status}">${badgeLabel.replace("â†’", "to")}</em>
-                    </button>
-                  </div>
-                `}).join("")}
+                      <button
+                        class="skill-node skill-node-compact skill-node-${isMaxed ? "owned" : node.status} ${isSelected ? "is-selected" : ""}"
+                        data-action="select-skill-node"
+                        data-skill-node-id="${node.id}"
+                      >
+                        <div class="skill-node-name-row">
+                          <strong>${node.label}</strong>
+                          ${levelChip}
+                        </div>
+                        <em class="skill-node-badge skill-node-badge-${isMaxed ? "owned" : node.status}">${badgeLabel.replace("â†’", "to")}</em>
+                      </button>
+                    </div>
+                  `}).join("")}
+                </div>
               </div>
-            </div>
-          `).join("")}
+            `).join("")}
+          </div>
+          ${renderSkillTreeDetail(tree, selection)}
         </div>
         <div class="utility-actions">
           <button class="header-button ghost" data-action="close-skill-tree">Close</button>

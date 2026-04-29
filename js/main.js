@@ -426,6 +426,20 @@ function handleAction(action, payload = {}) {
     return;
   }
 
+  // Click a node in the skill tree to focus it in the right-rail detail
+  // pane. Replaces the old hover-tooltip-only pattern. Selecting a node is
+  // a pure UI state change, not a purchase — purchase happens via the
+  // Learn button inside the rail.
+  if (action === "select-skill-node" && state.run.skillTreeOpen) {
+    state.run = {
+      ...state.run,
+      selectedSkillNodeId: payload.skillNodeId,
+    };
+    persist();
+    render(true);
+    return;
+  }
+
   if (action === "spend-stat") {
     commit(spendStatPoint(state.run, payload.stat));
     return;

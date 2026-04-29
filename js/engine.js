@@ -1885,13 +1885,16 @@ export function materializeTrainingReward(player, reward) {
 }
 
 export function buildVictoryTrainingChoices(nodeType, player) {
-  const skillPointRewards = TRAINING_REWARDS.filter((reward) => reward.kind === "SKILL_POINT");
+  // Skill points are no longer offered as a per-combat training pick.
+  // They flow exclusively from level-ups (see claimVictory) so the math
+  // fluency loop — XP earned from quick, accurate play — is the gate
+  // for talent progression. This stops the dominant "always pick skill
+  // point" strategy that made other rewards feel like noise.
   const otherRewards = TRAINING_REWARDS
     .filter((reward) => reward.kind !== "SKILL_POINT")
     .filter((reward) => reward.kind !== "ACTION" || player.actions.some((action) => action.id === reward.actionId))
     .map((reward) => materializeTrainingReward(player, reward));
-  const guaranteedSkillReward = skillPointRewards.length ? [materializeTrainingReward(player, sample(skillPointRewards))] : [];
-  const pool = [...guaranteedSkillReward, ...shuffle(otherRewards)];
+  const pool = shuffle(otherRewards);
   const baseCount = nodeType === NODE_TYPES.BOSS ? 4 : 3;
   return pool.slice(0, baseCount);
 }
@@ -3070,7 +3073,10 @@ function buildVictoryReward(run, player, battle) {
   const relicMods = getRelicModifiers(player);
   const baseGold = Math.floor(28 + (player.floor * 8));
   const gold = getSpoilsGoldAmount(player, Math.floor(baseGold + (nodeType === NODE_TYPES.ELITE ? 60 : 0) + (nodeType === NODE_TYPES.BOSS ? 180 : 0)), relicMods);
-  const xp = Math.floor(40 + (player.floor * 16) + (nodeType === NODE_TYPES.ELITE ? 45 : 0) + (nodeType === NODE_TYPES.BOSS ? 150 : 0));
+  // Boss and elite XP weights set so a boss reliably crosses the next
+  // level threshold and an elite is a meaningful bump. Tuned alongside
+  // the level-up-only skill point gating.
+  const xp = Math.floor(40 + (player.floor * 16) + (nodeType === NODE_TYPES.ELITE ? 70 : 0) + (nodeType === NODE_TYPES.BOSS ? 260 : 0));
   const relic = nodeType === NODE_TYPES.ELITE ? buildTreasureOffer(run).relic : null;
   const materials = getMetaRewardForNode(nodeType, player.floor);
   const herbs = rollHerbDrop(nodeType, relicMods);
@@ -3161,11 +3167,20 @@ export function claimVictory(run) {
   const nextRunStats = addBattleToRunStats(run.runStats, run.battle);
   player.block = 0;
   player.gold += reward.gold;
+  // Level-up loop. Each level grants +5 stat points AND +1 skill point.
+  // Skill points come exclusively from leveling now (Option A) — they are
+  // no longer offered as a per-combat training pick. The math fluency
+  // loop earns XP, XP earns levels, levels earn talent depth.
   let xpPool = player.xp + reward.xp;
+  let levelsGained = 0;
+  let skillPointsGainedFromLevels = 0;
   while (xpPool >= player.xpNext) {
     xpPool -= player.xpNext;
     player.level += 1;
     player.statPoints += 5;
+    player.skillPoints = Math.max(0, Number(player.skillPoints || 0)) + 1;
+    skillPointsGainedFromLevels += 1;
+    levelsGained += 1;
     player.xpNext = Math.floor(player.xpNext * 1.4);
   }
   player.xp = xpPool;
@@ -3184,7 +3199,14 @@ export function claimVictory(run) {
   const reachableNodeIds = chosenNode?.children?.length ? chosenNode.children : [];
   const visitedNodeIds = [...run.visitedNodeIds, run.chosenNodeId];
   const runReport = isFinalClear ? buildRunReportFromState(run, player, nextRunStats) : null;
-  const shouldOpenSkillTree = !isFinalClear && selectedTraining?.kind === "SKILL_POINT";
+  // Open the skill tree automatically when a level-up granted new points,
+  // so the player sees their new banked talent immediately. Replaces the
+  // old "selected SKILL_POINT training reward" trigger which is dead now
+  // that skill points come from leveling only.
+  const shouldOpenSkillTree = !isFinalClear && skillPointsGainedFromLevels > 0;
+  const levelUpLog = levelsGained > 0
+    ? `Level up! +${levelsGained * 5} stat points, +${skillPointsGainedFromLevels} skill point${skillPointsGainedFromLevels === 1 ? "" : "s"}.`
+    : null;
   return {
     ...run,
     player,
@@ -3200,7 +3222,11 @@ export function claimVictory(run) {
     visitedNodeIds,
     chosenNodeId: null,
     skillTreeOpen: shouldOpenSkillTree,
-    log: [...run.log, isFinalClear ? "The summit yields. The full report is ready." : trainingLog ? `${trainingLog} added to the run.` : reward.relic ? `${reward.relic.name} claimed from victory.` : "The path opens upward."],
+    log: [
+      ...run.log,
+      isFinalClear ? "The summit yields. The full report is ready." : trainingLog ? `${trainingLog} added to the run.` : reward.relic ? `${reward.relic.name} claimed from victory.` : "The path opens upward.",
+      ...(levelUpLog ? [levelUpLog] : []),
+    ],
   };
 }
 
@@ -3215,6 +3241,7 @@ export function closeSkillTree(run) {
   return {
     ...run,
     skillTreeOpen: false,
+    selectedSkillNodeId: null,
   };
 }
 
