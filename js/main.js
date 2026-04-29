@@ -636,11 +636,49 @@ function step(ms) {
   render(false);
 }
 
+// When the tab is backgrounded, requestAnimationFrame is throttled or
+// paused entirely. On return, nextNow is much further ahead of state.now
+// than a normal frame's worth (~16ms). Without compensation, the rAF
+// catch-up — clamped to small per-frame deltas but firing at 60fps —
+// burns the in-progress question's timer at ~3x real-time speed, so an
+// 8-second timer ran out in ~2.7 wall seconds. Detect the gap, snap
+// state.now to wall clock, and shift any active battle's
+// problemStartedAt forward by the same gap so the question's elapsed
+// time is unchanged across the pause.
+const FRAME_GAP_THRESHOLD_MS = 250;
+
 function frame(nextNow) {
+  const rawDelta = Math.max(0, nextNow - state.now);
+  if (rawDelta > FRAME_GAP_THRESHOLD_MS) {
+    const gap = rawDelta - 16.67;
+    // Pause the active question's timer across the tab-away gap.
+    if (state.run?.screen === SCREEN.BATTLE && state.run.battle?.problemStartedAt > 0) {
+      state.run.battle = {
+        ...state.run.battle,
+        problemStartedAt: state.run.battle.problemStartedAt + gap,
+      };
+    }
+    // run.elapsedMs is incremented in step() from delta — and delta is
+    // clamped to one normal frame after the snap below, so the gap is
+    // naturally excluded from the run timer too.
+    state.now = nextNow - 16.67;
+  }
   const delta = Math.min(50, Math.max(0, nextNow - state.now));
   step(delta || 16.67);
   requestAnimationFrame(frame);
 }
+
+// Page Visibility API fallback. Most browsers throttle rAF on hidden
+// tabs but a few (or some OS sleep states) pause it entirely; this
+// handler catches those cases too. On return, the next frame() call
+// will see the gap and apply the same problemStartedAt shift.
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    // Force state.now to lag behind so frame()'s gap-detection branch
+    // runs on the next tick and applies the timer-pause shift.
+    state.now = Math.min(state.now, performance.now() - FRAME_GAP_THRESHOLD_MS - 1);
+  }
+});
 
 window.advanceTime = (ms) => {
   const steps = Math.max(1, Math.round(ms / (1000 / 60)));
