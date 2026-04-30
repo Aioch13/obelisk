@@ -260,8 +260,14 @@ function handleAction(action, payload = {}) {
       resumeSavedRun();
       return;
     }
+    // The old single-profile flow sent Begin Climb into a "profile"
+    // phase that asked the player to confirm their record. Now that
+    // profile picking happens before the home screen (active slot is
+    // already set), we skip that step entirely and jump straight to
+    // legend selection. Keeping the old "profile" phase as a stop on
+    // the way would create a routing loop with the new picker alias.
     state.setup.view = "expedition";
-    state.setup.phase = "profile";
+    state.setup.phase = "legend";
     state.setup.entryMode = payload.mode || "new";
     state.setup.notice = null;
     state.setup.legendId = null;

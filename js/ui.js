@@ -1037,11 +1037,6 @@ function renderHub(profile, setup, roster) {
   if (phase === "home") {
     return renderLanding(profile, setup);
   }
-  if (phase === "profile") {
-    // Legacy "profile" phase kept as an alias for the picker so any
-    // older save state that still routes here doesn't crash.
-    return renderProfilePicker(roster, setup);
-  }
   const selectedLegend = setup.legendId ? getLegend(setup.legendId) : null;
   const selectedSpire = setup.spireId ? getSpire(setup.spireId) : null;
   const unlockedSpireIds = new Set(getUnlockedSpireIds(profile));
