@@ -355,6 +355,16 @@ function handleAction(action, payload = {}) {
     return;
   }
 
+  // Field Honors — achievements / trophies — live on their own dedicated
+  // screen so they don't compete with the actionable Outpost upgrades for
+  // attention. Honors are reflective; the Outpost is operational.
+  if (action === "open-honors") {
+    state.setup.view = "honors";
+    markDirty();
+    render(true);
+    return;
+  }
+
   if (action === "upgrade-base") {
     state.profile = upgradeBaseBuilding(state.profile, payload.buildingId);
     saveProfile({ ...state.profile, lastRun: null });

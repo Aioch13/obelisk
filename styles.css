@@ -3598,21 +3598,26 @@ p {
   min-width: 180px;
 }
 
+/* Timer bar lives in normal flow at the top of the combat tray — not
+ * absolutely positioned. Absolute positioning made the rectangular bar
+ * cut through the tray's rounded corners and visually collide with the
+ * enemy panel above. As an in-flow flex child it respects the tray's
+ * padding and rounds with the rest of the panel.
+ */
 .tray-timer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 10px;
-  border-radius: 999px 999px 0 0;
+  position: relative;
+  height: 8px;
+  margin: -4px -4px 4px;
+  border-radius: 999px;
   overflow: hidden;
-  background: rgba(255,255,255,0.06);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .tray-timer i {
   display: block;
   height: 100%;
-  background: var(--indigo);
+  background: linear-gradient(90deg, var(--indigo), rgba(129, 140, 248, 0.95));
+  transition: width 60ms linear;
 }
 
 .action-hand {
@@ -4208,6 +4213,21 @@ p {
 .shop-hero .utility-scene-image {
   aspect-ratio: 16 / 5;
   min-height: 220px;
+  /* Dim the hero art so item cards win the contrast fight when the
+   * player is scanning offers. The scene still sets mood; it just
+   * doesn't compete for attention. */
+  filter: brightness(0.62) saturate(0.85);
+}
+
+.shop-hero .utility-scene::after {
+  /* Stronger gradient overlay tying the hero image down toward the
+   * grid below, so the visual weight flows top→bottom into the offers. */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(8, 12, 22, 0) 50%, rgba(8, 12, 22, 0.72) 100%);
+  pointer-events: none;
+  z-index: 1;
 }
 
 .shop-hero-rail {
@@ -4348,6 +4368,59 @@ p {
 
 .shop-card-token {
   color: var(--orange);
+  font-weight: 900;
+  position: relative;
+}
+
+/* Per-kind tinted tokens. Each shop offer kind that lacks its own
+ * portrait (STAT drafts, action edges, polish/temper) gets a distinct
+ * background hue so the badge reads as designed differentiation rather
+ * than placeholder text in a generic box. The text glyph stays short
+ * (STR / VIT / FOC / EDGE / TEMPER); the chrome does the work.
+ */
+.shop-card-token-stat-str {
+  background:
+    linear-gradient(140deg, rgba(244, 114, 182, 0.22), rgba(244, 63, 94, 0.16)),
+    rgba(244, 63, 94, 0.10);
+  border-color: rgba(244, 114, 182, 0.42);
+  color: rgba(254, 202, 202, 0.95);
+}
+
+.shop-card-token-stat-vit {
+  background:
+    linear-gradient(140deg, rgba(34, 197, 94, 0.22), rgba(16, 185, 129, 0.16)),
+    rgba(16, 185, 129, 0.10);
+  border-color: rgba(34, 197, 94, 0.42);
+  color: rgba(187, 247, 208, 0.95);
+}
+
+.shop-card-token-stat-focus {
+  background:
+    linear-gradient(140deg, rgba(96, 165, 250, 0.22), rgba(99, 102, 241, 0.16)),
+    rgba(99, 102, 241, 0.10);
+  border-color: rgba(129, 140, 248, 0.42);
+  color: rgba(199, 210, 254, 0.95);
+}
+
+.shop-card-token-edge {
+  background:
+    linear-gradient(140deg, rgba(245, 158, 11, 0.24), rgba(251, 191, 36, 0.16)),
+    rgba(245, 158, 11, 0.10);
+  border-color: rgba(251, 191, 36, 0.42);
+  color: rgba(254, 215, 170, 0.98);
+}
+
+.shop-card-token-temper {
+  background:
+    linear-gradient(140deg, rgba(148, 163, 184, 0.22), rgba(100, 116, 139, 0.18)),
+    rgba(71, 85, 105, 0.14);
+  border-color: rgba(148, 163, 184, 0.42);
+  color: rgba(226, 232, 240, 0.95);
+}
+
+.shop-card-token-stock {
+  background: rgba(245, 158, 11, 0.10);
+  border-color: rgba(245, 158, 11, 0.25);
 }
 
 .shop-card-herbs {
@@ -4467,6 +4540,21 @@ p {
   color: var(--rose);
 }
 
+/* Subtle "X gold short" line tucked under the price chip when the player
+ * can't afford an offer. Replaces the older rose-red "Need X more"
+ * scold — informative, not punitive.
+ */
+.shop-card-shortage {
+  display: block;
+  margin-top: 4px;
+  font-style: normal;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(252, 165, 165, 0.78);
+}
+
 .shop-card-copy strong {
   font-size: 1.16rem;
   line-height: 1.08;
@@ -4494,7 +4582,12 @@ p {
 }
 
 .shop-card.is-disabled .shop-card-price {
-  background: rgba(148, 163, 184, 0.14);
+  background: rgba(244, 63, 94, 0.10);
+  border-color: rgba(244, 63, 94, 0.22);
+}
+
+.shop-card.is-disabled .shop-card-price strong {
+  color: rgba(252, 165, 165, 0.86);
 }
 
 .shop-card.is-disabled .shop-card-visual {
@@ -5698,6 +5791,166 @@ p {
   display: grid;
   gap: 12px;
   margin-bottom: 18px;
+}
+
+/* --- Honors screen (dedicated trophy wall) ------------------------------
+ *
+ * Carved out of the Outpost so the trophy wall doesn't compete with the
+ * actionable upgrade cards for attention. This is reflective space —
+ * the player comes here to see what they've earned and what's still
+ * ahead.
+ */
+.honors-screen {
+  display: grid;
+  gap: 22px;
+  padding: 22px 28px 32px;
+  background:
+    radial-gradient(circle at top center, rgba(245, 158, 11, 0.06), transparent 38%),
+    linear-gradient(180deg, rgba(14, 18, 30, 0.98), rgba(8, 12, 20, 0.98));
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.honors-phase-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.honors-summary {
+  display: grid;
+  grid-template-columns: minmax(140px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 16px 20px;
+  border-radius: 22px;
+  background:
+    linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(15, 20, 34, 0.86);
+  border: 1px solid rgba(245, 158, 11, 0.18);
+}
+
+.honors-summary-stat {
+  display: grid;
+  gap: 4px;
+}
+
+.honors-summary-stat span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.honors-summary-stat strong {
+  font-size: 1.6rem;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.honors-summary-progress {
+  display: grid;
+  gap: 6px;
+}
+
+.honors-summary-progress span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.honors-summary-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.honors-summary-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.92), rgba(251, 191, 36, 0.95));
+  border-radius: 999px;
+  transition: width 240ms ease;
+}
+
+.honors-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
+.honor-card {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(20, 26, 42, 0.96), rgba(14, 18, 32, 0.96));
+}
+
+.honor-card.is-earned {
+  border-color: rgba(245, 158, 11, 0.42);
+  background:
+    linear-gradient(135deg, rgba(245, 158, 11, 0.10), rgba(15, 20, 34, 0.88) 60%),
+    rgba(15, 20, 34, 0.88);
+}
+
+.honor-card.is-locked {
+  opacity: 0.62;
+}
+
+.honor-card-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 1.45rem;
+  font-weight: 900;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.honor-card.is-earned .honor-card-mark {
+  background:
+    radial-gradient(circle at center, rgba(251, 191, 36, 0.96), rgba(245, 158, 11, 0.85));
+  color: rgba(28, 22, 6, 0.94);
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.32);
+}
+
+.honor-card-body {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.honor-card-body strong {
+  font-size: 1.02rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  line-height: 1.15;
+}
+
+.honor-card-body p {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.honor-card.is-earned .honor-card-body strong {
+  color: rgba(254, 235, 198, 0.98);
 }
 
 .section-copy-row {

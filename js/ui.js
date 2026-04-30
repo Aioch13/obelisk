@@ -766,6 +766,7 @@ function renderHubModeSwitch(view) {
     <div class="hub-mode-switch">
       <button class="hub-mode-pill ${view === "expedition" ? "is-active" : ""}" data-action="open-expedition">Expedition</button>
       <button class="hub-mode-pill ${view === "base" ? "is-active" : ""}" data-action="open-base">Outpost</button>
+      <button class="hub-mode-pill ${view === "honors" ? "is-active" : ""}" data-action="open-honors">Honors</button>
     </div>
   `;
 }
@@ -794,7 +795,6 @@ function renderBase(profile) {
         </div>
         ${renderPortalTrack(profile, null, "full")}
       </section>
-      ${renderAchievementsPanel(profile)}
       <div class="base-grid">
         ${cards.map((card) => `
           <section class="base-card ${card.id === "portalArray" ? "portal-array-card" : ""}">
@@ -829,35 +829,6 @@ function renderBase(profile) {
       ${unlockReveal
         ? renderUnlockRevealModal(unlockReveal)
         : achievementReveal ? renderAchievementRevealModal(achievementReveal) : ""}
-    </section>
-  `;
-}
-
-function renderAchievementsPanel(profile) {
-  const catalog = getAchievementCatalog();
-  const unlocked = new Set(profile?.achievements?.unlocked || []);
-  if (!catalog.length) return "";
-  const earned = catalog.filter((entry) => unlocked.has(entry.id));
-  return `
-    <section class="base-achievements-band">
-      <div class="section-copy section-copy-row">
-        <h3>Field Honors</h3>
-        <span class="base-achievements-tally">${earned.length}/${catalog.length} earned</span>
-      </div>
-      <div class="achievements-grid">
-        ${catalog.map((entry) => {
-          const isUnlocked = unlocked.has(entry.id);
-          return `
-            <article class="achievement-card ${isUnlocked ? "is-earned" : "is-locked"}">
-              <div class="achievement-card-mark">${isUnlocked ? "★" : "·"}</div>
-              <div class="achievement-card-body">
-                <strong>${isUnlocked ? entry.name : "Locked Honor"}</strong>
-                <p>${isUnlocked ? entry.description : entry.hint || entry.description}</p>
-              </div>
-            </article>
-          `;
-        }).join("")}
-      </div>
     </section>
   `;
 }
@@ -917,9 +888,67 @@ function renderUnlockRevealModal(reveal) {
   `;
 }
 
+// Field Honors as their own screen. Carved out of the Outpost so the
+// trophy wall doesn't compete with the actionable upgrade cards for
+// attention. The Honors screen is reflective — players come here to
+// see what they've achieved and what's still ahead, not to take
+// immediate action on the run.
+function renderHonors(profile) {
+  const catalog = getAchievementCatalog();
+  const unlocked = new Set(profile?.achievements?.unlocked || []);
+  const earned = catalog.filter((entry) => unlocked.has(entry.id));
+  const earnedCount = earned.length;
+  const totalCount = catalog.length;
+  const completionPct = totalCount ? Math.round((earnedCount / totalCount) * 100) : 0;
+  const unlockReveal = profile.unlockReveal;
+  const achievementReveal = profile.achievements?.reveal;
+  return `
+    <section class="hub-screen honors-screen">
+      <div class="hub-phase-header honors-phase-header">
+        <div class="hub-phase-copy">
+          <p class="eyebrow">Field Honors</p>
+          <h2>The Trophy Wall</h2>
+          <p>Every honor below is a story the climb left in your hand. Earn one and the wall changes shape.</p>
+        </div>
+        ${renderHubModeSwitch("honors")}
+      </div>
+      <div class="honors-summary">
+        <div class="honors-summary-stat">
+          <span>Earned</span>
+          <strong>${earnedCount} / ${totalCount}</strong>
+        </div>
+        <div class="honors-summary-progress">
+          <div class="honors-summary-bar"><i style="width:${completionPct}%"></i></div>
+          <span>${completionPct}% complete</span>
+        </div>
+      </div>
+      <div class="honors-grid">
+        ${catalog.map((entry) => {
+          const isUnlocked = unlocked.has(entry.id);
+          return `
+            <article class="honor-card ${isUnlocked ? "is-earned" : "is-locked"}">
+              <div class="honor-card-mark">${isUnlocked ? "★" : "·"}</div>
+              <div class="honor-card-body">
+                <strong>${isUnlocked ? entry.name : "Locked Honor"}</strong>
+                <p>${isUnlocked ? entry.description : entry.hint || entry.description}</p>
+              </div>
+            </article>
+          `;
+        }).join("")}
+      </div>
+      ${unlockReveal
+        ? renderUnlockRevealModal(unlockReveal)
+        : achievementReveal ? renderAchievementRevealModal(achievementReveal) : ""}
+    </section>
+  `;
+}
+
 function renderHub(profile, setup) {
   if (setup.view === "base") {
     return renderBase(profile);
+  }
+  if (setup.view === "honors") {
+    return renderHonors(profile);
   }
   const phase = setup.phase || "home";
   if (phase === "home") {
@@ -1981,6 +2010,19 @@ function getShopOfferToken(offer) {
   return "STOCK";
 }
 
+// A token visual is the fallback for offers that don't carry a relic
+// portrait — STAT drafts, action refinements, polish/temper services.
+// We give each kind a distinct token-modifier class so they read as
+// deliberate badges instead of letters-in-a-box. The text glyph stays
+// short (STR / VIT / FOC / EDGE / TEMPER) but the surrounding chrome
+// does the visual differentiation.
+function getShopOfferTokenKind(offer) {
+  if (offer.kind === "STAT") return `stat-${offer.stat || "any"}`;
+  if (offer.kind === "ACTION_UPGRADE") return "edge";
+  if (offer.kind === "REMOVE") return "temper";
+  return "stock";
+}
+
 function renderShopOfferVisual(offer) {
   if (offer.relic) {
     return `<div class="shop-card-visual ${rarityClass(offer.relic.rarity)}">${renderRelicBadge(offer.relic, "shop-relic-art")}</div>`;
@@ -1992,8 +2034,9 @@ function renderShopOfferVisual(offer) {
       </div>
     `;
   }
+  const tokenKind = getShopOfferTokenKind(offer);
   return `
-    <div class="shop-card-visual shop-card-token">
+    <div class="shop-card-visual shop-card-token shop-card-token-${tokenKind}">
       <span>${getShopOfferToken(offer)}</span>
     </div>
   `;
@@ -2038,7 +2081,7 @@ function renderShop(run) {
                 <div class="shop-card-copy">
                   <div class="shop-card-meta">
                     <span class="shop-card-type">${getShopOfferTypeLabel(offer)}</span>
-                    <span class="${disabled ? "shop-card-warning" : "shop-card-ready"}">${disabled ? `Need ${shortage} more` : "Ready"}</span>
+                    ${disabled ? "" : `<span class="shop-card-ready">Ready</span>`}
                   </div>
                   <strong>${offer.label || offer.relic?.name}</strong>
                   <p>${offer.summary || offer.relic?.description || "Run upgrade"}</p>
@@ -2046,6 +2089,7 @@ function renderShop(run) {
                 <div class="shop-card-price">
                   <strong>${offer.cost}</strong>
                   <span>gold</span>
+                  ${disabled ? `<em class="shop-card-shortage">${shortage}g short</em>` : ""}
                 </div>
               </div>
             </button>
