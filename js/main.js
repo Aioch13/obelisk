@@ -674,6 +674,12 @@ function handleAction(action, payload = {}) {
 app.addEventListener("click", (event) => {
   const target = event.target.closest("[data-action]");
   if (!target) return;
+  // Forms with data-action handle their own submission via the form
+  // 'submit' event below. If we let the click handler match the form
+  // here, every click inside the form (including clicks into the name
+  // input) would fire the form's action immediately, making it
+  // impossible to type. Skip forms — they're not click-actionable.
+  if (target.tagName === "FORM") return;
   handleAction(target.dataset.action, {
     mode: target.dataset.mode,
     legend: target.dataset.legend,
