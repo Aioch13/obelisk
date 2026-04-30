@@ -1805,66 +1805,257 @@ export const BASE_UNLOCKS = {
       },
     },
   ],
+  // --- Archive: 9 tiers × ~2 events --------------------------------------
+  // The old structure dumped 9 events at T1 and 8 more at T2, so a player's
+  // event pool went from 10 → 19 → 27 in two purchases. Now each archive
+  // upgrade adds 2 events at a time, paced over the run economy. Costs
+  // shift from emberwood (early) → thorium (mid) → eternium (late) so
+  // material flow drives spire route choice.
   archive: [
     {
       tier: 1,
-      cost: { emberwood: 2 },
-      title: "Hard-Choice Records",
-      description: "Older records are unsealed, and stranger bargains begin to answer the climb.",
-      unlocks: {
-        events: ["shattered-dynamo", "mirror-of-edges", "sealed-vault", "hollow-apothecary", "glass-sanctum", "witch-lantern", "penitent-mill", "ash-monastery", "reliquary-well"],
-      },
+      cost: { emberwood: 1 },
+      title: "Wayfinder Records",
+      description: "The first sealed cabinets open. New roadside encounters begin to answer the climb.",
+      unlocks: { events: ["shattered-dynamo", "mirror-of-edges"] },
     },
     {
       tier: 2,
+      cost: { emberwood: 2 },
+      title: "Pilgrim Ledgers",
+      description: "Older traveler logs surface, hinting at stranger camps along the path.",
+      unlocks: { events: ["sealed-vault", "hollow-apothecary"] },
+    },
+    {
+      tier: 3,
+      cost: { emberwood: 3 },
+      title: "Glass Reliquary",
+      description: "Reflective archives unlock. Lessons from older climbers begin to repeat themselves.",
+      unlocks: { events: ["glass-sanctum", "witch-lantern"] },
+    },
+    {
+      tier: 4,
+      cost: { emberwood: 2, thorium: 1 },
+      title: "Penitent Codex",
+      description: "Harder doctrines emerge — pacts that exchange comfort for power.",
+      unlocks: { events: ["penitent-mill", "ash-monastery"] },
+    },
+    {
+      tier: 5,
+      cost: { emberwood: 1, thorium: 2 },
+      title: "Reliquary Well",
+      description: "Deep wells beneath the archive begin to surface midnight rites.",
+      unlocks: { events: ["reliquary-well", "oath-pyre"] },
+    },
+    {
+      tier: 6,
+      cost: { thorium: 3 },
+      title: "Ghost Quarter",
+      description: "Lost markets and silent crows reveal themselves between the floors.",
+      unlocks: { events: ["ghost-market", "black-banner"] },
+    },
+    {
+      tier: 7,
       cost: { thorium: 2, eternium: 1 },
-      title: "Forbidden Routes",
-      description: "The black ledgers are opened, drawing in rarer vows and riskier pacts.",
-      unlocks: {
-        events: ["oath-pyre", "ghost-market", "black-banner", "tally-of-crows", "fracture-dais", "ember-tribunal", "moon-reliquary", "gallows-ledger"],
-      },
+      title: "Tally Of Crows",
+      description: "Black ledgers open. Each contract carries teeth.",
+      unlocks: { events: ["tally-of-crows", "fracture-dais"] },
+    },
+    {
+      tier: 8,
+      cost: { thorium: 1, eternium: 2 },
+      title: "Ember Tribunal",
+      description: "The deepest judges convene, weighing every climber's ascent.",
+      unlocks: { events: ["ember-tribunal", "moon-reliquary"] },
+    },
+    {
+      tier: 9,
+      cost: { eternium: 3 },
+      title: "Gallows Ledger",
+      description: "The last sealed shelf gives up its accounts. Nothing in the archive is hidden now.",
+      unlocks: { events: ["gallows-ledger"] },
     },
   ],
+  // --- Relic Forge: 12 tiers × ~3 relics ----------------------------------
+  // 35 relics is too many to gate at 2-per-tier (would need 18 tiers). At
+  // 3-per-tier this lands at 12 tiers — a meaningful long game without
+  // exhausting the player's patience for upgrade cards. Costs follow the
+  // same emberwood → thorium → eternium curve as archive.
   relicForge: [
     {
       tier: 1,
-      cost: { emberwood: 1, thorium: 1 },
+      cost: { emberwood: 1 },
       title: "Field Relics",
-      description: "The forge begins turning out steadier charms and battle trinkets.",
-      unlocks: {
-        relics: ["scholar-spark", "emerald-script", "rogue-loop", "guardian-circuit", "combo-censer", "brass-bulwark", "field-bandage", "cinder-charm", "duelist-thread", "quarter-seal", "herbal-satchel", "storm-phial", "raven-banner", "hearth-sigil"],
-      },
+      description: "The first anvil lights. Steady frontier charms begin to surface in the climb.",
+      unlocks: { relics: ["scholar-spark", "emerald-script", "rogue-loop"] },
     },
     {
       tier: 2,
+      cost: { emberwood: 2 },
+      title: "Frontier Charms",
+      description: "Wandering smiths add their own work to the pool.",
+      unlocks: { relics: ["guardian-circuit", "combo-censer", "brass-bulwark"] },
+    },
+    {
+      tier: 3,
+      cost: { emberwood: 3 },
+      title: "Ember Heirlooms",
+      description: "Hand-me-down trinkets from the first generation of climbers join the rotation.",
+      unlocks: { relics: ["field-bandage", "cinder-charm", "duelist-thread"] },
+    },
+    {
+      tier: 4,
+      cost: { emberwood: 2, thorium: 1 },
+      title: "Iron Refinement",
+      description: "The forge tempers harder. Sturdier instruments enter the run pool.",
+      unlocks: { relics: ["quarter-seal", "herbal-satchel", "storm-phial"] },
+    },
+    {
+      tier: 5,
+      cost: { emberwood: 1, thorium: 2 },
+      title: "Storm Curios",
+      description: "Stranger artifacts surface from beneath the foundry floor.",
+      unlocks: { relics: ["raven-banner", "hearth-sigil", "assassin-abacus"] },
+    },
+    {
+      tier: 6,
+      cost: { thorium: 3 },
+      title: "Thorium Sigils",
+      description: "The deeper currents are bound into steel. Calculation engines begin to appear.",
+      unlocks: { relics: ["arcane-engine", "focus-prism", "stability-glyph"] },
+    },
+    {
+      tier: 7,
       cost: { thorium: 2, eternium: 1 },
       title: "Mythic Engine",
       description: "The deeper furnaces ignite, drawing forth rarer instruments of power.",
-      unlocks: {
-        relics: ["assassin-abacus", "arcane-engine", "focus-prism", "stability-glyph", "battery-core", "tempo-sigil", "war-drum", "glass-compass", "soul-prism", "night-market-coin", "forked-fang", "gale-cutters", "thorn-codex", "cathedral-battery", "thunder-doctrine", "first-strike-codex", "executioner-glyph", "eternity-engine", "resonant-glass", "stalwart-ledger", "tempo-breaker"],
-      },
+      unlocks: { relics: ["battery-core", "tempo-sigil", "war-drum"] },
+    },
+    {
+      tier: 8,
+      cost: { thorium: 1, eternium: 2 },
+      title: "Skyforge Kindling",
+      description: "Lightning-tempered relics enter the rotation, each tuned to a sharper rhythm.",
+      unlocks: { relics: ["glass-compass", "soul-prism", "night-market-coin"] },
+    },
+    {
+      tier: 9,
+      cost: { eternium: 3 },
+      title: "Eternium Lattice",
+      description: "Lattices of deep ore awaken. The relic pool runs deeper now than the forge knows.",
+      unlocks: { relics: ["forked-fang", "gale-cutters", "thorn-codex"] },
+    },
+    {
+      tier: 10,
+      cost: { eternium: 4 },
+      title: "Cathedral Crowns",
+      description: "The cathedral's own vaults unseal. Heirloom relics from prior ages return.",
+      unlocks: { relics: ["cathedral-battery", "thunder-doctrine", "first-strike-codex"] },
+    },
+    {
+      tier: 11,
+      cost: { eternium: 5 },
+      title: "Sentinel's Heart",
+      description: "Relics torn from the climb's older sentinels enter the rotation.",
+      unlocks: { relics: ["executioner-glyph", "eternity-engine", "resonant-glass"] },
+    },
+    {
+      tier: 12,
+      cost: { eternium: 6 },
+      title: "Obelisk Capstone",
+      description: "The final crowns. Every relic the forge can ever know is awake.",
+      unlocks: { relics: ["stalwart-ledger", "tempo-breaker"] },
     },
   ],
+  // --- War Room: 9 tiers × ~2 enemies/bosses ------------------------------
+  // The biggest individual problem in the old structure: a single T2
+  // upgrade unlocked 11 bosses at once. New structure splits monsters,
+  // elites, and bosses into a slow drip. Players see new enemies one or
+  // two at a time, so the bestiary builds with the run economy.
   warRoom: [
     {
       tier: 1,
-      cost: { emberwood: 1, thorium: 1 },
+      cost: { emberwood: 1 },
       title: "Expanded Patrols",
-      description: "Wider patrol paths rouse fresh fiends and harder wardens.",
+      description: "Wider patrol paths rouse fresh fiends to test the climb.",
       unlocks: {
-        monsters: ["shade", "brute", "crow"],
-        elites: ["warden", "disciple"],
+        monsters: ["shade"],
+        elites: ["warden"],
       },
     },
     {
       tier: 2,
-      cost: { thorium: 2, eternium: 1 },
-      title: "Boss Hunt Orders",
-      description: "Ancient hunt marks are restored, and stronger champions answer each act.",
+      cost: { emberwood: 2 },
+      title: "Watch Reports",
+      description: "Deeper patrols surface stranger threats from the lower floors.",
+      unlocks: {
+        monsters: ["brute"],
+        elites: ["disciple"],
+      },
+    },
+    {
+      tier: 3,
+      cost: { emberwood: 3 },
+      title: "Hunting Charts",
+      description: "Old hunt marks are restored. The frontier opens to harder cuts.",
+      unlocks: {
+        monsters: ["crow"],
+        elites: ["breaker"],
+      },
+    },
+    {
+      tier: 4,
+      cost: { emberwood: 2, thorium: 1 },
+      title: "Sealed Bestiary",
+      description: "The first sealed champions awaken. Boss orders begin to circulate.",
       unlocks: {
         monsters: ["priest"],
-        elites: ["breaker"],
-        bosses: ["gatekeeper", "sigil-engine", "obelisk-heart", "iron-pulpit", "horologium", "null-monarch", "sum-archon", "rust-cleaver", "product-leviathan", "divisor-saint", "equation-crown"],
+        bosses: ["gatekeeper"],
+      },
+    },
+    {
+      tier: 5,
+      cost: { emberwood: 1, thorium: 2 },
+      title: "Sigil Engines",
+      description: "Twin engines wake beneath the war room. Boss roster expands.",
+      unlocks: {
+        bosses: ["sigil-engine", "obelisk-heart"],
+      },
+    },
+    {
+      tier: 6,
+      cost: { thorium: 3 },
+      title: "Iron Pulpit",
+      description: "Sermons from the iron pulpit summon more terrible champions to the climb.",
+      unlocks: {
+        bosses: ["iron-pulpit", "horologium"],
+      },
+    },
+    {
+      tier: 7,
+      cost: { thorium: 2, eternium: 1 },
+      title: "Null Court",
+      description: "The null court opens its trial. Two more crowned beasts answer.",
+      unlocks: {
+        bosses: ["null-monarch", "sum-archon"],
+      },
+    },
+    {
+      tier: 8,
+      cost: { thorium: 1, eternium: 2 },
+      title: "Cleaver Hall",
+      description: "The cleaver hall throws open its gates. Late-act terrors join the roster.",
+      unlocks: {
+        bosses: ["rust-cleaver", "product-leviathan"],
+      },
+    },
+    {
+      tier: 9,
+      cost: { eternium: 3 },
+      title: "Crown Of Operators",
+      description: "The final two thrones answer. The bestiary is complete.",
+      unlocks: {
+        bosses: ["divisor-saint", "equation-crown"],
       },
     },
   ],
