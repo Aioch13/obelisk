@@ -455,18 +455,27 @@ function renderHeaderRelics(relics) {
   `;
 }
 
-function renderHeader(profile, run, setup = null) {
+function renderHeader(profile, run, setup = null, roster = null) {
   if (!run) {
+    const hasActiveProfile = !!roster?.activeProfileId;
+    const onPickerScreen = setup?.phase === "picker" || setup?.phase === "create-profile" || !hasActiveProfile;
+    const playerName = profile?.name || "Player";
     return `
       <header class="app-header app-header-hub">
         <div class="brand-block compact">
           <p class="eyebrow">Math Monster Frontier</p>
-          ${setup?.phase === "home" ? "" : `<button class="header-button ghost hub-home-button" data-action="back-to-home">Home</button>`}
+          ${onPickerScreen || setup?.phase === "home" ? "" : `<button class="header-button ghost hub-home-button" data-action="back-to-home">Home</button>`}
         </div>
         <div class="header-tray">
-          <div class="header-pill"><span>Best Floor</span><strong>${(profile.bestRunFloor || 0) + 1}</strong></div>
-          <div class="header-pill"><span>Runs</span><strong>${profile.totalRuns || 0}</strong></div>
-          <button class="header-button subtle" data-action="clear-save">Clear Save</button>
+          ${onPickerScreen ? "" : `
+            <div class="header-pill profile-pill" title="Currently signed in as ${escapeAttr(playerName)}">
+              <span>Player</span><strong>${escapeAttr(playerName)}</strong>
+            </div>
+            <button class="header-button ghost" data-action="switch-player" title="Hand the keyboard to another player">Switch Player</button>
+            <div class="header-pill"><span>Best Floor</span><strong>${(profile.bestRunFloor || 0) + 1}</strong></div>
+            <div class="header-pill"><span>Runs</span><strong>${profile.totalRuns || 0}</strong></div>
+            <button class="header-button subtle" data-action="clear-save" title="Wipe this profile's save (other profiles are not affected)">Clear Save</button>
+          `}
         </div>
       </header>
     `;
@@ -699,38 +708,101 @@ function renderLanding(profile, setup) {
   `;
 }
 
-function renderProfileSelection(profile, setup) {
-  const unlockedSpires = getUnlockedSpireIds(profile);
+// Multi-profile picker. Lists every profile in the roster as a tile and
+// offers a "+ New Player" tile that routes into the creator. Each tile
+// shows the profile's most-recently-used legend as its portrait, so a
+// kid can identify their slot at a glance without reading their own name.
+function renderProfilePicker(roster, setup) {
+  const profiles = Array.isArray(roster?.list) ? roster.list : [];
+  const isEmpty = profiles.length === 0;
   return `
     <section class="hub-screen hub-screen-profile">
-      <div class="profile-stage">
+      <div class="profile-picker-stage">
         <div class="hub-phase-header compact profile-phase-header">
           <div class="hub-phase-copy">
             <p class="eyebrow">Camp Chronicle</p>
-            <h2>Choose A Record</h2>
-            <p>Choose the camp record that will begin this climb.</p>
+            <h2>${isEmpty ? "Create Your Profile" : "Who's Climbing?"}</h2>
+            <p>${isEmpty
+              ? "No records yet. Type a name to create your first profile and start the climb."
+              : "Pick a profile to play, or create a new one."}</p>
           </div>
-          <button class="header-button ghost" data-action="back-to-home">Back</button>
         </div>
-        <button class="profile-card" data-action="select-profile" title="Use this profile for your next expedition.">
-          <div class="profile-card-head">
-            <div>
-              <p class="eyebrow">Camp Ledger</p>
-              <h3>Primary Record</h3>
+        ${setup?.notice ? `<div class="landing-notice">${setup.notice}</div>` : ""}
+        <div class="profile-picker-grid">
+          ${profiles.map((entry) => {
+            const legend = entry.lastLegendId ? getLegend(entry.lastLegendId) : null;
+            const portrait = legend
+              ? `<img class="profile-tile-portrait" src="${legend.asset}" alt="${escapeAttr(legend.name)}" />`
+              : `<div class="profile-tile-portrait profile-tile-portrait-blank"><span>?</span></div>`;
+            const legendLabel = legend ? legend.name : "No legend yet";
+            const summary = entry.totalRuns > 0
+              ? `Best Floor ${entry.bestRunFloor + 1} · ${entry.totalRuns} run${entry.totalRuns === 1 ? "" : "s"}`
+              : "Fresh climb";
+            return `
+              <button class="profile-tile ${entry.isActive ? "is-active" : ""}" data-action="pick-profile" data-profile-id="${entry.id}">
+                ${portrait}
+                <div class="profile-tile-body">
+                  <strong>${escapeAttr(entry.name)}</strong>
+                  <span class="profile-tile-legend">${escapeAttr(legendLabel)}</span>
+                  <span class="profile-tile-stats">${summary}</span>
+                </div>
+              </button>
+            `;
+          }).join("")}
+          <button class="profile-tile profile-tile-new" data-action="open-create-profile">
+            <div class="profile-tile-portrait profile-tile-portrait-add"><span>+</span></div>
+            <div class="profile-tile-body">
+              <strong>New Player</strong>
+              <span class="profile-tile-stats">Type a name to start</span>
             </div>
-            <div class="profile-card-status">Fresh Climb</div>
+          </button>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+// Name-input flow for creating a new profile. Kept deliberately simple —
+// one text input, an Enter-to-submit form, and a back button that
+// returns to the picker without creating anything.
+function renderProfileCreator(roster, setup) {
+  const draft = setup?.creatingProfileName || "";
+  const profiles = Array.isArray(roster?.list) ? roster.list : [];
+  const allowBack = profiles.length > 0;
+  return `
+    <section class="hub-screen hub-screen-profile">
+      <div class="profile-picker-stage profile-creator-stage">
+        <div class="hub-phase-header compact profile-phase-header">
+          <div class="hub-phase-copy">
+            <p class="eyebrow">New Player</p>
+            <h2>What's your name?</h2>
+            <p>This name will appear on your profile and your saves. You can pick a legend after.</p>
           </div>
-          <div class="profile-card-grid">
-            <div class="profile-stat"><span>Best Floor</span><strong>${(profile.bestRunFloor || 0) + 1}</strong></div>
-            <div class="profile-stat"><span>Runs</span><strong>${profile.totalRuns || 0}</strong></div>
-            <div class="profile-stat"><span>Gates Lit</span><strong>${unlockedSpires.length}</strong></div>
-            <div class="profile-stat"><span>Wings Lit</span><strong>${Object.values(profile.base.buildings || {}).reduce((sum, tier) => sum + tier, 0)}</strong></div>
+          ${allowBack ? `<button class="header-button ghost" data-action="cancel-create-profile">Back</button>` : ""}
+        </div>
+        ${setup?.notice ? `<div class="landing-notice">${setup.notice}</div>` : ""}
+        <form class="profile-creator-form" data-action="submit-create-profile">
+          <label class="profile-creator-label" for="profile-name-input">Name</label>
+          <input
+            id="profile-name-input"
+            class="profile-creator-input"
+            type="text"
+            name="profileName"
+            value="${escapeAttr(draft)}"
+            maxlength="24"
+            autocomplete="off"
+            autofocus
+            placeholder="e.g. Lucas"
+          />
+          <div class="profile-creator-actions">
+            <!-- No data-action on this button: both the form's submit
+                 event and a button click would otherwise fire the same
+                 handler, causing a double-call. The form's data-action
+                 attribute is the single source of truth — clicking the
+                 button just submits the form natively. -->
+            <button class="header-button primary" type="submit">Create Profile</button>
           </div>
-          <div class="profile-card-footer">
-            <span>Continue to legend selection</span>
-            <strong>Take Up The Record</strong>
-          </div>
-        </button>
+        </form>
       </div>
     </section>
   `;
@@ -943,19 +1015,32 @@ function renderHonors(profile) {
   `;
 }
 
-function renderHub(profile, setup) {
+function renderHub(profile, setup, roster) {
+  // Profile picker takes precedence over everything else when there's no
+  // active profile selected — first launch, after a Switch Player click,
+  // or after the active profile got deleted. The picker also wins when
+  // setup.phase is explicitly "picker" or "create-profile".
+  const phase = setup.phase || "home";
+  const hasActiveProfile = !!roster?.activeProfileId;
+  if (phase === "create-profile") {
+    return renderProfileCreator(roster, setup);
+  }
+  if (!hasActiveProfile || phase === "picker") {
+    return renderProfilePicker(roster, setup);
+  }
   if (setup.view === "base") {
     return renderBase(profile);
   }
   if (setup.view === "honors") {
     return renderHonors(profile);
   }
-  const phase = setup.phase || "home";
   if (phase === "home") {
     return renderLanding(profile, setup);
   }
   if (phase === "profile") {
-    return renderProfileSelection(profile, setup);
+    // Legacy "profile" phase kept as an alias for the picker so any
+    // older save state that still routes here doesn't crash.
+    return renderProfilePicker(roster, setup);
   }
   const selectedLegend = setup.legendId ? getLegend(setup.legendId) : null;
   const selectedSpire = setup.spireId ? getSpire(setup.spireId) : null;
@@ -2165,20 +2250,20 @@ function renderGameOver(run) {
 }
 
 export function renderApp(state) {
-  const { profile, run, setup, timeLeft } = state;
+  const { profile, run, setup, timeLeft, roster } = state;
 
   if (!run) {
     return `
       <div class="app-shell">
         ${renderShellBackdrop(null, setup)}
-        ${renderHeader(profile, null, setup)}
-        ${renderHub(profile, setup)}
+        ${renderHeader(profile, null, setup, roster)}
+        ${renderHub(profile, setup, roster)}
       </div>
     `;
   }
 
   let mainScreen = "";
-  if (run.screen === SCREEN.HUB) mainScreen = renderHub(profile, setup);
+  if (run.screen === SCREEN.HUB) mainScreen = renderHub(profile, setup, roster);
     if ([SCREEN.MAP, SCREEN.EVENT, SCREEN.MINIGAME, SCREEN.REST, SCREEN.TREASURE, SCREEN.SHOP].includes(run.screen)) {
       mainScreen = renderMap(run);
     }

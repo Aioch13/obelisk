@@ -35,12 +35,37 @@ import {
   usePotion,
   updateProfile,
 } from "./engine.js";
-import { clearProfile, loadProfile, saveProfile } from "./storage.js";
+import {
+  clearProfile,
+  createProfile,
+  getProfileList,
+  loadProfile,
+  loadRoster,
+  saveProfile,
+  setActiveProfile,
+} from "./storage.js";
 import { buildGameText, renderApp } from "./ui.js";
 
 const app = document.getElementById("app");
 
+// --- Roster helpers ------------------------------------------------------
+//
+// state.roster mirrors what's on disk; state.profile is always the active
+// slot's blob. Whenever the roster changes (pick / create / switch /
+// clear), we rebuild state.profile from the new active slot so the rest
+// of the engine and UI keep working unchanged.
+function buildRosterView(roster) {
+  return {
+    activeProfileId: roster?.activeProfileId || null,
+    list: getProfileList(roster),
+  };
+}
+
+const initialRoster = loadRoster();
+const initialPhase = initialRoster.activeProfileId ? "home" : "picker";
+
 const state = {
+  roster: buildRosterView(initialRoster),
   profile: hydrateProfile(loadProfile()),
   run: null,
   now: performance.now(),
@@ -49,10 +74,11 @@ const state = {
     legendId: null,
     spireId: null,
     tierId: null,
-    phase: "home",
+    phase: initialPhase,
     view: "expedition",
     entryMode: "new",
     notice: null,
+    creatingProfileName: "",
   },
 };
 
@@ -259,12 +285,97 @@ function handleAction(action, payload = {}) {
     return;
   }
 
+  // --- Multi-profile picker actions -----------------------------------
+  // pick-profile: kid clicks a tile on the picker. Set that slot as
+  // active in storage, refresh the in-memory profile, and route into
+  // the landing screen.
+  if (action === "pick-profile") {
+    if (!payload.profileId) return;
+    const nextRoster = setActiveProfile(loadRoster(), payload.profileId);
+    state.roster = buildRosterView(nextRoster);
+    state.profile = hydrateProfile(loadProfile());
+    state.setup.phase = "home";
+    state.setup.notice = null;
+    state.setup.creatingProfileName = "";
+    markDirty();
+    render(true);
+    return;
+  }
+
+  // open-create-profile: kid clicks "+ New Player" tile. Route into the
+  // name-input screen with a fresh draft.
+  if (action === "open-create-profile") {
+    state.setup.phase = "create-profile";
+    state.setup.creatingProfileName = "";
+    state.setup.notice = null;
+    markDirty();
+    render(true);
+    return;
+  }
+
+  // cancel-create-profile: back-out from the name input. Returns to the
+  // picker if any profiles exist, otherwise stays put (can't escape the
+  // creator on first launch when there's nothing else to pick).
+  if (action === "cancel-create-profile") {
+    if (state.roster.list.length > 0) {
+      state.setup.phase = "picker";
+      state.setup.creatingProfileName = "";
+      markDirty();
+      render(true);
+    }
+    return;
+  }
+
+  // submit-create-profile: form submit with the name. Read the input
+  // value live (we don't track keystrokes — we just grab the input on
+  // submit), validate, create the slot, route to landing.
+  if (action === "submit-create-profile") {
+    const input = app.querySelector('#profile-name-input');
+    const rawName = input ? String(input.value || "") : "";
+    const trimmed = rawName.trim();
+    if (!trimmed) {
+      state.setup.notice = "Type a name to create your profile.";
+      markDirty();
+      render(true);
+      return;
+    }
+    const nextRoster = createProfile(loadRoster(), trimmed);
+    state.roster = buildRosterView(nextRoster);
+    state.profile = hydrateProfile(loadProfile());
+    state.setup.phase = "home";
+    state.setup.notice = null;
+    state.setup.creatingProfileName = "";
+    markDirty();
+    render(true);
+    return;
+  }
+
+  // switch-player: returns to the picker so a different kid can take
+  // the keyboard. Doesn't unset activeProfileId immediately — the
+  // picker handles re-selecting (or creating) — but routing to the
+  // picker phase makes sure the new pick takes effect before any save.
+  if (action === "switch-player") {
+    state.setup.phase = "picker";
+    state.setup.notice = null;
+    state.run = null;
+    markDirty();
+    render(true);
+    return;
+  }
+
   if (action === "select-legend") {
     const firstUnlockedSpireId = getUnlockedSpireIds(state.profile)[0] || null;
     state.setup.view = "expedition";
     state.setup.legendId = payload.legend;
     state.setup.spireId = firstUnlockedSpireId;
     state.setup.phase = "spire";
+    // Stash the chosen legend on the active profile so the picker tile
+    // can show this legend's portrait as the slot's avatar next time.
+    if (payload.legend && state.profile) {
+      state.profile = { ...state.profile, lastLegendId: payload.legend };
+      saveProfile({ ...state.profile, lastRun: state.run });
+      state.roster = buildRosterView(loadRoster());
+    }
     markDirty();
     render(true);
     return;
@@ -577,7 +688,19 @@ app.addEventListener("click", (event) => {
     moveId: target.dataset.moveId,
     techniqueId: target.dataset.techniqueId,
     skillNodeId: target.dataset.skillNodeId,
+    profileId: target.dataset.profileId,
   });
+});
+
+// Form submit handler — the profile creator uses a <form data-action=
+// "submit-create-profile"> wrapper so pressing Enter in the name input
+// triggers it. Default form behavior would reload the page; we
+// preventDefault and route through handleAction instead.
+app.addEventListener("submit", (event) => {
+  const form = event.target.closest("form[data-action]");
+  if (!form) return;
+  event.preventDefault();
+  handleAction(form.dataset.action, {});
 });
 
 window.addEventListener("keydown", (event) => {
