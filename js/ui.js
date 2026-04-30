@@ -588,15 +588,62 @@ function renderHubSteps(phase) {
   `;
 }
 
+// Map an operator symbol to its English name, used for spire-aware tier
+// blurbs so an addition spire isn't told about multiplication etc.
+const OP_NAMES = { "+": "addition", "-": "subtraction", "*": "multiplication", "/": "division" };
+
+// Build the tier card's summary/detail copy in the context of the
+// spire the player picked. For a single-operator spire (e.g. addition),
+// strip out mentions of operators that don't apply and show numeric
+// ranges drawn from tier.ranges[op] so the player sees what the tier
+// actually does on THIS climb. Mixed spires keep the generic copy.
+function describeTierForSpire(tier, spireId) {
+  const spire = spireId ? getSpire(spireId) : null;
+  // No spire chosen yet, or the mixed spire — generic copy still applies.
+  if (!spire || spire.symbol === "MIX") {
+    return {
+      summary: tier.summary,
+      detail: tier.description,
+      showOpsTag: true,
+    };
+  }
+  const op = spire.symbol;
+  const opName = OP_NAMES[op] || "math";
+  const allowed = (tier.allowedOps || []).includes(op);
+  if (!allowed) {
+    // Tier doesn't allow this spire's operator at all — show that
+    // explicitly so the player understands why the card is locked.
+    return {
+      summary: `${opName.charAt(0).toUpperCase() + opName.slice(1)} not taught at this tier.`,
+      detail: `${tier.name} keeps the math to easier shapes; this spire's operator isn't in scope yet.`,
+      showOpsTag: false,
+    };
+  }
+  const ranges = tier?.ranges?.[op];
+  if (!Array.isArray(ranges) || ranges.length < 4) {
+    // Data missing — fall back to generic without ops tag noise.
+    return { summary: tier.summary, detail: tier.description, showOpsTag: false };
+  }
+  const earliest = ranges[1] || ranges[2] || ranges[3];
+  const latest = ranges[3] || ranges[2] || ranges[1];
+  const sameRange = earliest.lo === latest.lo && earliest.hi === latest.hi;
+  const summary = sameRange
+    ? `Numbers ${earliest.lo}–${earliest.hi}.`
+    : `Numbers ${earliest.lo}–${earliest.hi} early, ${latest.lo}–${latest.hi} by the boss.`;
+  const detail = `Tuned for ${spire.name}: ${opName} problems scale gradually act by act at this tier.`;
+  return { summary, detail, showOpsTag: false };
+}
+
 function renderTierCards(setup, profile) {
   const selectedSpireId = setup.spireId;
   const selectedTierId = setup.tierId || profile?.preferredTierId || DEFAULT_TIER_ID;
   return CLIMB_TIERS.map((tier) => {
     const compatible = !selectedSpireId || isSpireAllowedAtTier(selectedSpireId, tier.id);
     const selected = tier.id === selectedTierId;
+    const blurb = describeTierForSpire(tier, selectedSpireId);
     const disabledOps = ["+", "-", "*", "/"].filter((op) => !(tier.allowedOps || []).includes(op));
     const opsTag = disabledOps.length
-      ? `<span class="tier-card-ops-tag">No ${disabledOps.map((op) => op === "+" ? "addition" : op === "-" ? "subtraction" : op === "*" ? "multiplication" : "division").join(" / ")}</span>`
+      ? `<span class="tier-card-ops-tag">No ${disabledOps.map((op) => OP_NAMES[op]).join(" / ")}</span>`
       : `<span class="tier-card-ops-tag">All four operations</span>`;
     const timerTag = tier.timerMultiplier === 1
       ? "Standard timer"
@@ -610,10 +657,10 @@ function renderTierCards(setup, profile) {
           <p class="eyebrow">${tier.audience}</p>
           <h3>${tier.name}</h3>
         </div>
-        <p class="tier-card-summary">${tier.summary}</p>
-        <p class="tier-card-detail">${tier.description}</p>
+        <p class="tier-card-summary">${blurb.summary}</p>
+        <p class="tier-card-detail">${blurb.detail}</p>
         <div class="tier-card-footer">
-          ${opsTag}
+          ${blurb.showOpsTag ? opsTag : ""}
           <span class="tier-card-timer-tag">${timerTag}</span>
         </div>
         ${incompatibleNote}
